@@ -12,13 +12,20 @@ from io import BytesIO
 
 app = Flask(__name__)
 
-# Paths (relative to project root on Render)
-base_path = "./trained_features"  # Ensure this folder exists on Render
+# ✅ Corrected Base Path (Relative to Server Folder)
+base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "trained_features"))
 model_path = os.path.join(base_path, "keras", "rl_jewelry_model.keras")
 scaler_path = os.path.join(base_path, "scaler.pkl")
 pairwise_features_path = os.path.join(base_path, "pandas", "pairwise_features.npy")
 
-# Custom InputLayer to handle 'batch_shape' keyword (map it to 'batch_input_shape')
+# ✅ Debugging Paths
+print("🔍 Checking paths:")
+print("Base Path:", base_path)
+print("Model Path:", model_path, "Exists:", os.path.exists(model_path))
+print("Scaler Path:", scaler_path, "Exists:", os.path.exists(scaler_path))
+print("Pairwise Features Path:", pairwise_features_path, "Exists:", os.path.exists(pairwise_features_path))
+
+# Custom InputLayer to handle 'batch_shape' keyword
 class CustomInputLayer(tf.keras.layers.InputLayer):
     def __init__(self, **kwargs):
         if 'batch_shape' in kwargs:
@@ -27,7 +34,7 @@ class CustomInputLayer(tf.keras.layers.InputLayer):
 
 class JewelryRLPredictor:
     def __init__(self, model_path, scaler_path, pairwise_features_path):
-        # Check if files exist
+        # 🔍 Ensure all required files exist
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"❌ Model file not found: {model_path}")
         if not os.path.exists(scaler_path):
@@ -36,7 +43,6 @@ class JewelryRLPredictor:
             raise FileNotFoundError(f"❌ Pairwise features file not found: {pairwise_features_path}")
 
         print("✅ Loading model...")
-        # Use custom_objects to map InputLayer to CustomInputLayer
         self.model = load_model(model_path, custom_objects={'InputLayer': CustomInputLayer})
         self.img_size = (224, 224)
         self.device = "/GPU:0" if tf.config.list_physical_devices('GPU') else "/CPU:0"
@@ -67,7 +73,6 @@ class JewelryRLPredictor:
 
     def extract_features(self, img_file):
         try:
-            # Process image directly from memory
             img = image.load_img(BytesIO(img_file.read()), target_size=self.img_size)
             img_array = image.img_to_array(img)
             img_array = np.expand_dims(img_array, axis=0)
@@ -80,7 +85,6 @@ class JewelryRLPredictor:
 
     def categorize_suitability(self, score):
         """Convert numerical compatibility score into categories."""
-        # Assumes score is scaled between 0 and 1.
         if score < 0.2:
             return "❌ Very Bad"
         elif score < 0.4:
@@ -93,21 +97,18 @@ class JewelryRLPredictor:
             return "🌟 Very Good"
 
     def predict_compatibility(self, face_img_file, jewel_img_file):
-        # Extract features from both face and jewelry images.
         face_features = self.extract_features(face_img_file)
         jewel_features = self.extract_features(jewel_img_file)
         if face_features is None or jewel_features is None:
             return None, None, None
 
-        # Normalize features and compute cosine similarity.
         face_norm = face_features / np.linalg.norm(face_features, axis=1, keepdims=True)
         jewel_norm = jewel_features / np.linalg.norm(jewel_features, axis=1, keepdims=True)
-        cosine_similarity = np.sum(face_norm * jewel_norm, axis=1)[0]  # Range: [-1, 1]
-        # Scale cosine similarity to [0, 1]
+        cosine_similarity = np.sum(face_norm * jewel_norm, axis=1)[0]  
         scaled_score = (cosine_similarity + 1) / 2.0
         category = self.categorize_suitability(scaled_score)
 
-        # Recommend jewelry using the RL model based on face features.
+        # Recommend jewelry using RL model
         with tf.device(self.device):
             q_values = self.model.predict(face_features, verbose=0)[0]
         top_indices = np.argsort(q_values)[::-1]
@@ -116,22 +117,22 @@ class JewelryRLPredictor:
         top_recommendations = [(self.jewelry_names[idx], q_values[idx]) for idx in top_indices[:top_n]]
         top_recommendations.sort(key=lambda x: x[0])
         recommendations = [name for name, _ in top_recommendations]
-        
+
         return scaled_score, category, recommendations
 
-# Initialize predictor (handle errors)
+# ✅ Initialize Predictor (Handle Errors)
 try:
     predictor = JewelryRLPredictor(model_path, scaler_path, pairwise_features_path)
 except Exception as e:
     print(f"❌ Failed to initialize JewelryRLPredictor: {e}")
-    predictor = None  # Prevent app from crashing
+    predictor = None
 
 @app.route('/predict', methods=['POST'])
 def predict():
     if predictor is None:
         return jsonify({'error': 'Model is not loaded properly'}), 500
 
-    # Require both face and jewel images.
+    # ✅ Ensure correct field names
     if 'face_image' not in request.files or 'jewel_image' not in request.files:
         return jsonify({'error': 'Both face_image and jewel_image must be provided'}), 400
 
@@ -153,6 +154,5 @@ def predict():
     return jsonify(response), 200
 
 if __name__ == '__main__':
-    # Use port from environment variable if available.
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
