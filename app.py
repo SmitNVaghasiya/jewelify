@@ -8,17 +8,15 @@ from tensorflow.keras.models import load_model, Model
 import pickle
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
+from io import BytesIO
 
 app = Flask(__name__)
 
-# Paths (adjust based on your server setup)
-base_path = "/trained_features"  # Update this
+# Paths (relative to project root on Render)
+base_path = "./trained_features"  # Assumes files are in trained_features/ folder
 model_path = f"{base_path}/keras/rl_jewelry_model.keras"
 scaler_path = f"{base_path}/scaler.pkl"
 pairwise_features_path = f"{base_path}/pandas/pairwise_features.npy"
-upload_folder = "/path/to/your/server/uploads"  # Directory to store uploaded images
-os.makedirs(upload_folder, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = upload_folder
 
 class JewelryRLPredictor:
     def __init__(self, model_path, scaler_path, pairwise_features_path):
@@ -43,11 +41,10 @@ class JewelryRLPredictor:
         self.jewelry_list = list(self.pairwise_features.values())
         self.jewelry_names = list(self.pairwise_features.keys())
 
-    def extract_features(self, img_path):
-        if not os.path.exists(img_path):
-            return None
+    def extract_features(self, img_file):
         try:
-            img = image.load_img(img_path, target_size=self.img_size)
+            # Process image directly from memory
+            img = image.load_img(BytesIO(img_file.read()), target_size=self.img_size)
             img_array = image.img_to_array(img)
             img_array = np.expand_dims(img_array, axis=0)
             img_array = preprocess_input(img_array)
@@ -57,8 +54,8 @@ class JewelryRLPredictor:
             print(f"⚠️ Error extracting features: {e}")
             return None
 
-    def predict_compatibility(self, face_img_path):
-        face_features = self.extract_features(face_img_path)
+    def predict_compatibility(self, face_img_file):
+        face_features = self.extract_features(face_img_file)
         if face_features is None:
             return None, None
 
@@ -93,17 +90,14 @@ def predict():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
-    filename = secure_filename(file.filename)
-    face_img_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(face_img_path)
-
-    score, recommendations = predictor.predict_compatibility(face_img_path)
+    # Process the file directly from memory
+    score, recommendations = predictor.predict_compatibility(file)
     
     if score is None:
         return jsonify({'error': 'Prediction failed'}), 500
     
     response = {
-        'score': float(score),  # Convert to float for JSON serialization
+        'score': float(score),
         'recommendations': recommendations
     }
     return jsonify(response), 200
