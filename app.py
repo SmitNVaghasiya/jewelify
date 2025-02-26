@@ -13,10 +13,14 @@ from io import BytesIO
 app = Flask(__name__)
 
 # Define Corrected Paths
-base_path = os.path.abspath(os.path.dirname(__file__))
-model_path = os.path.join(base_path, "trained_features", "keras", "rl_jewelry_model.keras")
-scaler_path = os.path.join(base_path, "trained_features", "scaler.pkl")
-pairwise_features_path = os.path.join(base_path, "trained_features", "pandas", "pairwise_features.npy")
+# base_path = os.path.abspath(os.path.dirname(__file__))
+# model_path = os.path.join(base_path, "trained_features", "keras", "rl_jewelry_model.keras")
+# scaler_path = os.path.join(base_path, "trained_features", "scaler.pkl")
+# pairwise_features_path = os.path.join(base_path, "trained_features", "pandas", "pairwise_features.npy")
+
+model_path = "trained_features\keras\rl_jewelry_model.keras"
+scaler_path = "trained_features\scaler.pkl"
+pairwise_features_path = "trained_features\pandas\pairwise_features.npy"
 
 print("🔍 Checking paths:")
 print("Model Path:", model_path, "Exists:", os.path.exists(model_path))
