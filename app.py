@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from io import BytesIO
 from PIL import Image
 import uvicorn
-from dotenv import load_dotenv  # Add this import
+from dotenv import load_dotenv
 
 # Load environment variables from .env file (for local use)
 load_dotenv()
@@ -42,8 +42,16 @@ class PredictInput(BaseModel):
 # Predictor class
 class JewelryRLPredictor:
     def __init__(self, model_path, scaler_path, pairwise_features_path):
-        if not all(os.path.exists(p) for p in [model_path, scaler_path, pairwise_features_path]):
-            raise FileNotFoundError("Missing required model or data files!")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Checking for model at: {model_path}")
+        logger.info(f"Checking for scaler at: {scaler_path}")
+        logger.info(f"Checking for pairwise features at: {pairwise_features_path}")
+        
+        missing_files = [p for p in [model_path, scaler_path, pairwise_features_path] if not os.path.exists(p)]
+        if missing_files:
+            error_msg = f"Missing files: {', '.join(missing_files)}"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
         
         logger.info("Loading model...")
         self.model = load_model(model_path)
