@@ -10,6 +10,7 @@ import requests
 import logging
 from flask import Flask, request, jsonify
 from io import BytesIO
+from PIL import Image  # Ensure PIL is imported for proper image handling
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -26,8 +27,10 @@ app = Flask(__name__)
 # ---------------------- Jewelry RL Predictor ----------------------
 class JewelryRLPredictor:
     def __init__(self, model_path, scaler_path, pairwise_features_path):
-        if not all(os.path.exists(p) for p in [model_path, scaler_path, pairwise_features_path]):
-            raise FileNotFoundError("Missing one or more required files.")
+        # Check file existence and log missing files
+        missing_files = [p for p in [model_path, scaler_path, pairwise_features_path] if not os.path.exists(p)]
+        if missing_files:
+            raise FileNotFoundError(f"Missing files: {', '.join(missing_files)}")
 
         logger.info("🚀 Loading model...")
         self.model = load_model(model_path)  # No custom objects needed
@@ -45,7 +48,12 @@ class JewelryRLPredictor:
         self.feature_extractor = Model(inputs=base_model.input, outputs=global_avg_layer(base_model.output))
 
         logger.info("📂 Loading pairwise features...")
-        self.pairwise_features = np.load(pairwise_features_path, allow_pickle=True).item()
+        try:
+            self.pairwise_features = np.load(pairwise_features_path, allow_pickle=False).item()
+        except ValueError:
+            logger.warning("⚠️ Could not load pairwise features with `allow_pickle=False`, retrying with `allow_pickle=True`")
+            self.pairwise_features = np.load(pairwise_features_path, allow_pickle=True).item()
+
         self.jewelry_names = list(self.pairwise_features.keys())
 
         logger.info("✅ Predictor initialized successfully!")
@@ -53,7 +61,8 @@ class JewelryRLPredictor:
     def extract_features(self, img_data):
         """Extract features from an image file or URL."""
         try:
-            img = image.load_img(BytesIO(img_data), target_size=self.img_size)
+            img = Image.open(BytesIO(img_data))  # Open image from bytes
+            img = img.resize(self.img_size)  # Resize properly
             img_array = image.img_to_array(img)
             img_array = np.expand_dims(img_array, axis=0)
             img_array = preprocess_input(img_array)
@@ -71,7 +80,7 @@ class JewelryRLPredictor:
             return None, "Feature extraction failed", []
 
         cosine_similarity = np.dot(face_features, jewel_features.T).flatten()[0]
-        scaled_score = (cosine_similarity + 1) / 2.0
+        scaled_score = (cosine_similarity + 1) / 2.0  # Normalize to 0-1 range
         category = ("🌟 Very Good" if scaled_score >= 0.8 else
                     "✅ Good" if scaled_score >= 0.6 else
                     "😐 Neutral" if scaled_score >= 0.4 else
@@ -106,14 +115,20 @@ def predict():
     if face_data:
         face_data = face_data.read()
     elif face_url:
-        face_data = requests.get(face_url).content
+        try:
+            face_data = requests.get(face_url).content
+        except requests.RequestException as e:
+            return jsonify({'error': f'Failed to fetch face image: {e}'}), 400
     else:
         return jsonify({'error': 'Face image is required'}), 400
 
     if jewelry_data:
         jewelry_data = jewelry_data.read()
     elif jewelry_url:
-        jewelry_data = requests.get(jewelry_url).content
+        try:
+            jewelry_data = requests.get(jewelry_url).content
+        except requests.RequestException as e:
+            return jsonify({'error': f'Failed to fetch jewelry image: {e}'}), 400
     else:
         return jsonify({'error': 'Jewelry image is required'}), 400
 
