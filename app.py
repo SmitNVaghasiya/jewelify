@@ -87,6 +87,11 @@ except Exception as e:
     logger.error(f"🚨 Failed to initialize JewelryRLPredictor: {e}")
     predictor = None
 
+# ---------------------- Home Route ----------------------
+@app.route('/')
+def home():
+    return "Jewelry RL API is running!", 200
+
 # ---------------------- Flask API Endpoint ----------------------
 @app.route('/predict', methods=['POST'])
 def predict():
