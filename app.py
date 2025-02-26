@@ -111,8 +111,8 @@ def home():
 # ---------------------- Flask API Endpoint ----------------------
 @app.route('/predict', methods=['POST'])
 def predict():
-    if predictor is None:
-        return jsonify({'error': 'Model is not loaded properly'}), 500
+    # if predictor is None:
+    #     return jsonify({'error': 'Model is not loaded properly'}), 500
 
     face_data = request.files.get('face')
     jewelry_data = request.files.get('jewelry')
