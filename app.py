@@ -18,6 +18,16 @@ pairwise_features_path = "trained_features/pandas/pairwise_features.npy"
 # Flask app
 app = Flask(__name__)
 
+# ------------------ Custom InputLayer to fix deserialization ------------------
+from tensorflow.keras.layers import InputLayer as KerasInputLayer
+
+class CustomInputLayer(KerasInputLayer):
+    def __init__(self, **kwargs):
+        # Map 'batch_shape' to 'batch_input_shape'
+        if 'batch_shape' in kwargs:
+            kwargs['batch_input_shape'] = kwargs.pop('batch_shape')
+        super().__init__(**kwargs)
+
 # ---------------------- Jewelry RL Predictor ----------------------
 class JewelryRLPredictor:
     def __init__(self, model_path, scaler_path, pairwise_features_path):
@@ -26,7 +36,7 @@ class JewelryRLPredictor:
                 raise FileNotFoundError(f"Missing required file: {path}")
 
         print("🚀 Loading model...")
-        self.model = load_model(model_path)
+        self.model = load_model(model_path, custom_objects={'InputLayer': CustomInputLayer})
         self.img_size = (224, 224)
         self.feature_size = 1280
         self.device = "/GPU:0" if tf.config.list_physical_devices('GPU') else "/CPU:0"
