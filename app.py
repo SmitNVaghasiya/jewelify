@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications import MobileNetV2
@@ -10,16 +11,20 @@ import requests
 import logging
 from flask import Flask, request, jsonify
 from io import BytesIO
-from PIL import Image  # Ensure PIL is imported for proper image handling
+from PIL import Image  # Fix for image handling
 
-# Configure Logging
-logging.basicConfig(level=logging.INFO)
+# Configure Logging to Ensure Visibility in Render Logs
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]  # Ensures logs are shown in Render
+)
 logger = logging.getLogger(__name__)
 
 # Define Paths
-model_path = "rl_jewelry_model.keras"
-scaler_path = "scaler.pkl"
-pairwise_features_path = "pairwise_features.npy"
+MODEL_PATH = "rl_jewelry_model.keras"
+SCALER_PATH = "scaler.pkl"
+PAIRWISE_FEATURES_PATH = "pairwise_features.npy"
 
 # Flask app
 app = Flask(__name__)
@@ -27,13 +32,13 @@ app = Flask(__name__)
 # ---------------------- Jewelry RL Predictor ----------------------
 class JewelryRLPredictor:
     def __init__(self, model_path, scaler_path, pairwise_features_path):
-        # Check file existence and log missing files
+        """Initialize model, scaler, and feature extractor"""
         missing_files = [p for p in [model_path, scaler_path, pairwise_features_path] if not os.path.exists(p)]
         if missing_files:
-            raise FileNotFoundError(f"Missing files: {', '.join(missing_files)}")
+            raise FileNotFoundError(f"🚨 Missing files: {', '.join(missing_files)}")
 
         logger.info("🚀 Loading model...")
-        self.model = load_model(model_path)  # No custom objects needed
+        self.model = load_model(model_path)  # Load model
         self.img_size = (224, 224)
         self.feature_size = 1280
         self.device = "/CPU:0"  # Force CPU usage
@@ -55,13 +60,12 @@ class JewelryRLPredictor:
             self.pairwise_features = np.load(pairwise_features_path, allow_pickle=True).item()
 
         self.jewelry_names = list(self.pairwise_features.keys())
-
         logger.info("✅ Predictor initialized successfully!")
 
     def extract_features(self, img_data):
-        """Extract features from an image file or URL."""
+        """Extract features from an image"""
         try:
-            img = Image.open(BytesIO(img_data))  # Open image from bytes
+            img = Image.open(BytesIO(img_data)).convert("RGB")  # Convert to RGB to prevent issues
             img = img.resize(self.img_size)  # Resize properly
             img_array = image.img_to_array(img)
             img_array = np.expand_dims(img_array, axis=0)
@@ -69,29 +73,32 @@ class JewelryRLPredictor:
             features = self.feature_extractor.predict(img_array, verbose=0)
             return self.scaler.transform(features)
         except Exception as e:
-            logger.error(f"❌ Error extracting features: {e}")
+            logger.error(f"❌ Feature extraction failed: {e}")
             return None
 
     def predict_compatibility(self, face_data, jewel_data):
-        """Predict compatibility between a face and jewelry."""
+        """Predict compatibility between a face and jewelry"""
         face_features = self.extract_features(face_data)
         jewel_features = self.extract_features(jewel_data)
+        
         if face_features is None or jewel_features is None:
             return None, "Feature extraction failed", []
 
         cosine_similarity = np.dot(face_features, jewel_features.T).flatten()[0]
         scaled_score = (cosine_similarity + 1) / 2.0  # Normalize to 0-1 range
-        category = ("🌟 Very Good" if scaled_score >= 0.8 else
-                    "✅ Good" if scaled_score >= 0.6 else
-                    "😐 Neutral" if scaled_score >= 0.4 else
-                    "⚠️ Bad" if scaled_score >= 0.2 else
-                    "❌ Very Bad")
+        category = (
+            "🌟 Very Good" if scaled_score >= 0.8 else
+            "✅ Good" if scaled_score >= 0.6 else
+            "😐 Neutral" if scaled_score >= 0.4 else
+            "⚠️ Bad" if scaled_score >= 0.2 else
+            "❌ Very Bad"
+        )
 
         return scaled_score, category, self.jewelry_names[:10]  # Return top jewelry names as dummy recommendations
 
 # Initialize predictor
 try:
-    predictor = JewelryRLPredictor(model_path, scaler_path, pairwise_features_path)
+    predictor = JewelryRLPredictor(MODEL_PATH, SCALER_PATH, PAIRWISE_FEATURES_PATH)
 except Exception as e:
     logger.error(f"🚨 Failed to initialize JewelryRLPredictor: {e}")
     predictor = None
