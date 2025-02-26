@@ -108,11 +108,16 @@ except Exception as e:
 def home():
     return "Jewelry RL API is running!", 200
 
-# ---------------------- Flask API Endpoint ----------------------
 @app.route('/predict', methods=['POST'])
 def predict():
-    # if predictor is None:
-    #     return jsonify({'error': 'Model is not loaded properly'}), 500
+    global predictor  # Ensure we use the global variable
+    
+    if predictor is None:  # Reinitialize if predictor is not loaded
+        try:
+            predictor = JewelryRLPredictor(MODEL_PATH, SCALER_PATH, PAIRWISE_FEATURES_PATH)
+        except Exception as e:
+            logger.error(f"🚨 Failed to initialize JewelryRLPredictor: {e}")
+            return jsonify({'error': 'Model initialization failed'}), 500
 
     face_data = request.files.get('face')
     jewelry_data = request.files.get('jewelry')
@@ -144,6 +149,7 @@ def predict():
         return jsonify({'error': 'Prediction failed'}), 500
 
     return jsonify({'score': float(score), 'category': category, 'recommendations': recommendations})
+
 
 # ---------------------- Production Deployment ----------------------
 if __name__ == "__main__":
