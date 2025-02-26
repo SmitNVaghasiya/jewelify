@@ -11,9 +11,9 @@ from flask import Flask, request, jsonify
 from io import BytesIO
 
 # Define Paths (Update paths if needed)
-model_path = "trained_features/keras/rl_jewelry_model.keras"
-scaler_path = "trained_features/scaler.pkl"
-pairwise_features_path = "trained_features/pandas/pairwise_features.npy"
+model_path = "rl_jewelry_model.keras"
+scaler_path = "scaler.pkl"
+pairwise_features_path = "pairwise_features.npy"
 
 # Flask app
 app = Flask(__name__)
