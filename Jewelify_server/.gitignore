@@ -1,1 +1,44 @@
-/__pycache__
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+.pyre/
+.hypothesis/
+
+# Environment variables
+.env
+.env.local
+.env.dev
+.env.production
+
+# Database
+*.db
+*.db-journal
+
+# Security/credentials
+*.pem
+*.key
+*.crt
+*.cert
+secret_token.rb
+
+# Local config
+.local/
+settings_local.py
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
