@@ -1,0 +1,9 @@
+# Brainstorming / visual companion sessions
+.superpowers/
+
+# Temp tool output
+.agent_design_output.txt
+.agent_ux.txt
+
+.agent
+.claude
