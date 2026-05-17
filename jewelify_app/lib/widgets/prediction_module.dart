@@ -374,7 +374,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/jewelry_recommendation.dart';
-import 'image_storage.dart';
 import 'image_zoom_widget.dart';
 import 'recommendation_card.dart';
 import 'score_display.dart';
@@ -410,17 +409,12 @@ class _PredictionModuleState extends State<PredictionModule>
   double _overallFeedbackScore = 0.0;
   final Map<String, double> _recommendationFeedbackScores = {};
   bool _hasSubmittedOverallFeedback = false;
-  bool _isSubmittingFeedback = false;
 
   @override
   void initState() {
     super.initState();
-    _faceImageFuture = ImageStorage.getCachedImage(
-      widget.prediction['face_image_path'],
-    );
-    _jewelryImageFuture = ImageStorage.getCachedImage(
-      widget.prediction['jewelry_image_path'],
-    );
+    _faceImageFuture = _loadFile(widget.prediction['face_image_path']);
+    _jewelryImageFuture = _loadFile(widget.prediction['jewelry_image_path']);
 
     final recommendations =
         widget.prediction['recommendations'] as List<JewelryRecommendation>? ??
@@ -442,6 +436,12 @@ class _PredictionModuleState extends State<PredictionModule>
     }
   }
 
+  Future<File?> _loadFile(dynamic path) async {
+    if (path == null || path.toString().isEmpty) return null;
+    final file = File(path.toString());
+    return await file.exists() ? file : null;
+  }
+
   void _showZoomableImage(int initialIndex, List<Map<String, dynamic>> images) {
     showDialog(
       context: context,
@@ -452,28 +452,6 @@ class _PredictionModuleState extends State<PredictionModule>
             onClose: () => Navigator.of(context).pop(),
           ),
     );
-  }
-
-  void _submitOverallFeedback(double score) async {
-    if (_hasSubmittedOverallFeedback || _isSubmittingFeedback) return;
-
-    setState(() {
-      _isSubmittingFeedback = true;
-    });
-
-    String review = (score / 100.0).toStringAsFixed(2);
-    await widget.onFeedbackSubmit(
-      widget.predictionId,
-      widget.prediction['model'],
-      review: review,
-    );
-    if (mounted) {
-      setState(() {
-        _hasSubmittedOverallFeedback = true;
-        _overallFeedbackScore = score;
-        _isSubmittingFeedback = false;
-      });
-    }
   }
 
   @override

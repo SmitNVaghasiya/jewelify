@@ -2,32 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../constants/api.dart';
 
 class UserOut {
   final String id;
   final String? username;
-  final String mobileNo;
+  final String? name;
+  final String email;
   final String? createdAt;
   final String? accessToken;
 
   UserOut({
     required this.id,
     this.username,
-    required this.mobileNo,
+    this.name,
+    required this.email,
     this.createdAt,
     this.accessToken,
   });
 
   factory UserOut.fromJson(Map<String, dynamic> json) {
     final id = json['id'] as String?;
-    final mobileNo = json['mobileNo'] as String?;
-    if (id == null || mobileNo == null) {
-      throw FormatException('Invalid JSON: id and mobileNo are required');
+    final email = json['email'] as String?;
+    if (id == null || email == null) {
+      throw const FormatException('Invalid JSON: id and email are required');
     }
     return UserOut(
       id: id,
       username: json['username'] as String?,
-      mobileNo: mobileNo,
+      name: json['name'] as String?,
+      email: email,
       createdAt: json['created_at'] as String?,
       accessToken: json['access_token'] as String?,
     );
@@ -38,14 +42,16 @@ class AuthProvider with ChangeNotifier {
   String? _token;
   String? _userId;
   String? _username;
-  String? _mobileNo;
+  String? _name;
+  String? _email;
 
   final _storage = const FlutterSecureStorage();
 
   String? get token => _token;
   String? get userId => _userId;
   String? get username => _username;
-  String? get mobileNo => _mobileNo;
+  String? get name => _name;
+  String? get email => _email;
   bool get isAuthenticated => _token != null;
 
   AuthProvider() {
@@ -53,148 +59,120 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> loadToken() async {
-    _token = await _storage.read(key: 'auth_token');
-    _userId = await _storage.read(key: 'user_id');
+    _token    = await _storage.read(key: 'auth_token');
+    _userId   = await _storage.read(key: 'user_id');
     _username = await _storage.read(key: 'username');
-    _mobileNo = await _storage.read(key: 'mobileNo');
+    _name     = await _storage.read(key: 'name');
+    _email    = await _storage.read(key: 'email');
     notifyListeners();
   }
 
-  Future<void> _saveToken({
-    String? token,
-    String? userId,
-    String? username,
-    String? mobileNo,
-  }) async {
-    if (token != null) await _storage.write(key: 'auth_token', value: token);
-    if (userId != null) await _storage.write(key: 'user_id', value: userId);
-    if (username != null) {
-      await _storage.write(key: 'username', value: username);
+  Future<void> _saveUser(UserOut user, String token) async {
+    await _storage.write(key: 'auth_token', value: token);
+    await _storage.write(key: 'user_id',    value: user.id);
+    await _storage.write(key: 'username',   value: user.username ?? '');
+    await _storage.write(key: 'name',       value: user.name ?? '');
+    await _storage.write(key: 'email',      value: user.email);
+    _token    = token;
+    _userId   = user.id;
+    _username = user.username;
+    _name     = user.name;
+    _email    = user.email;
+    notifyListeners();
+  }
+
+  Future<void> login(String email, String password) async {
+    final res = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    );
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body);
+      throw Exception(body['detail'] ?? 'Login failed');
     }
-    if (mobileNo != null) {
-      await _storage.write(key: 'mobileNo', value: mobileNo);
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final token = body['access_token'] as String;
+    final userJson = body['user'] as Map<String, dynamic>? ?? body;
+    await _saveUser(UserOut.fromJson(userJson), token);
+  }
+
+  Future<void> sendRegistrationOtp(String email) async {
+    final res = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/auth/send-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body);
+      throw Exception(body['detail'] ?? 'Failed to send OTP');
     }
   }
 
-  Future<void> updateUserDetails({
-    required String token,
-    required String userId,
+  Future<void> register({
+    required String name,
     required String username,
-    required String mobileNo,
+    required String email,
+    required String password,
+    required String otp,
   }) async {
-    _token = token;
-    _userId = userId;
-    _username = username;
-    _mobileNo = mobileNo;
-    await _saveToken(
-      token: token,
-      userId: userId,
-      username: username,
-      mobileNo: mobileNo,
+    final res = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name,
+        'username': username,
+        'email': email,
+        'password': password,
+        'otp': otp,
+      }),
     );
-    notifyListeners();
-  }
-
-  Future<void> sendOtp(String mobileNo) async {
-    try {
-      final url = 'https://jewelify-server.onrender.com/auth/send-otp';
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'mobileNo': mobileNo}),
-      );
-
-      if (response.statusCode != 200) {
-        final errorDetail =
-            jsonDecode(response.body)['detail'] ?? 'Unknown error';
-        throw Exception('Failed to send OTP: $errorDetail');
-      }
-    } catch (e) {
-      rethrow;
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      final body = jsonDecode(res.body);
+      throw Exception(body['detail'] ?? 'Registration failed');
     }
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final token = body['access_token'] as String;
+    final userJson = body['user'] as Map<String, dynamic>? ?? body;
+    await _saveUser(UserOut.fromJson(userJson), token);
   }
 
-  Future<void> verifyOtp(String mobileNo, String otp) async {
-    try {
-      final url = 'https://jewelify-server.onrender.com/auth/verify-otp';
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'mobileNo': mobileNo, 'otp': otp}),
-      );
-
-      if (response.statusCode != 200) {
-        final errorDetail =
-            jsonDecode(response.body)['detail'] ?? 'Unknown error';
-        throw Exception('Failed to verify OTP: $errorDetail');
-      }
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> login(String usernameOrMobile, String password) async {
-    try {
-      final url = 'https://jewelify-server.onrender.com/auth/login';
-      final body = {'username': usernameOrMobile, 'password': password}.entries
-          .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
-          .join('&');
-
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: body,
-      );
-
-      if (response.statusCode != 200) {
-        final errorData = jsonDecode(response.body);
-        throw Exception(
-          'Failed to login: ${errorData['detail'] ?? response.body}',
-        );
-      }
-
-      final data = jsonDecode(response.body);
-      _token = data['access_token'];
-      // Since the login endpoint doesn't return user details, fetch them
-      final userData = await _fetchUserDetails(data['access_token']);
-      _userId = userData['id'];
-      _username = userData['username'];
-      _mobileNo = userData['mobileNo'];
-      await _saveToken(
-        token: _token!,
-        userId: _userId,
-        username: _username,
-        mobileNo: _mobileNo,
-      );
-      notifyListeners();
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> _fetchUserDetails(String token) async {
-    final url = 'https://jewelify-server.onrender.com/auth/me';
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+  Future<void> sendForgotPasswordOtp(String email) async {
+    final res = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
     );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to fetch user details');
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body);
+      throw Exception(body['detail'] ?? 'Failed to send reset OTP');
     }
+  }
 
-    return jsonDecode(response.body);
+  Future<void> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+  }) async {
+    final res = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/auth/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'otp': otp, 'new_password': newPassword}),
+    );
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body);
+      throw Exception(body['detail'] ?? 'Password reset failed');
+    }
   }
 
   Future<void> logout() async {
-    _token = null;
-    _userId = null;
-    _username = null;
-    _mobileNo = null;
     await _storage.deleteAll();
+    _token = _userId = _username = _name = _email = null;
     notifyListeners();
   }
+
+  Map<String, String> get authHeaders => {
+    'Authorization': 'Bearer $_token',
+    'Content-Type': 'application/json',
+  };
 }

@@ -24,7 +24,7 @@ The application is deployed on **Render** for the backend, with features like JW
 
 ## Features
 
-- **User Authentication:** Secure sign-up, login, and profile management using JWT.
+- **User Authentication:** Email + password login with email OTP verification. JWT-based session management.
 - **Jewelry Predictions:** Processes face and jewelry images to predict compatibility scores and recommend jewelry.
 - **User History:** Stores and retrieves past predictions for user reference.
 - **Image Processing:** Detects facial features using OpenCV for AI-based analysis.
@@ -138,9 +138,11 @@ The application is deployed on **Render** for the backend, with features like JW
    ```
 
 3. **Configure API Base URL:**
-   Update the API base URL in your Flutter code (e.g., in a constants file) to point to your backend:
+   API base URL is centralized in `lib/constants/api.dart`:
    ```dart
-   const String apiBaseUrl = 'http://localhost:5000'; // Update with your deployed URL
+   class ApiConstants {
+     static const String baseUrl = 'https://jewelify-server.onrender.com';
+   }
    ```
 
 ## Running the Application

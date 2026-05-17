@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/jewelry_recommendation.dart';
 import '../widgets/prediction_module.dart';
-import 'dart:developer' as developer;
+import '../widgets/skeleton_loader.dart';
+import '../constants/api.dart';
+import '../screens/app_theme.dart';
 
 class ResultsScreen extends StatefulWidget {
   final Map<String, dynamic>? initialResult;
@@ -61,12 +63,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
     final predictionData = widget.initialResult ?? routeArgs;
     final predictionId = predictionData?['prediction_id'] as String?;
 
-    developer.log(
-      'Fetching result with predictionId: $predictionId',
-      name: 'ResultsScreen',
-    );
-
-    // Check for pre-fetched prediction data
     if (predictionId == null &&
         predictionData != null &&
         predictionData.containsKey('prediction1')) {
@@ -90,7 +86,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       ),
                     )
                     .toList() ??
-                [], // Keep as List<JewelryRecommendation>
+                [],
             'face_image_path': predictionData['face_image_path'],
             'jewelry_image_path': predictionData['jewelry_image_path'],
             'model': 'prediction1',
@@ -121,7 +117,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       ),
                     )
                     .toList() ??
-                [], // Keep as List<JewelryRecommendation>
+                [],
             'face_image_path': predictionData['face_image_path'],
             'jewelry_image_path': predictionData['jewelry_image_path'],
             'model': 'prediction2',
@@ -138,12 +134,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         ];
         _isLoading = false;
       });
-      developer.log(
-        'Using pre-fetched prediction data: $_predictions',
-        name: 'ResultsScreen',
-      );
 
-      // Check if the predictions are fallback values
       if (_isFallbackPrediction()) {
         setState(() {
           _errorMessage = "Prediction failed on the server. Please try again.";
@@ -158,7 +149,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
         _isLoading = false;
         _errorMessage = "No prediction data provided";
       });
-      developer.log('No predictionId provided', name: 'ResultsScreen');
       return;
     }
 
@@ -166,7 +156,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
     const pollingInterval = Duration(seconds: 5);
     var attempts = 0;
 
-    // Update loading message if polling takes longer than 60 seconds
     Future.delayed(const Duration(seconds: 60), () {
       if (mounted && _isLoading && !_isLongPolling) {
         setState(() {
@@ -179,11 +168,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     while (attempts < maxAttempts) {
       try {
         final apiUrl =
-            'https://jewelify-server.onrender.com/predictions/get_prediction/$predictionId';
-        developer.log(
-          'Polling API URL: $apiUrl (Attempt ${attempts + 1})',
-          name: 'ResultsScreen',
-        );
+            '${ApiConstants.baseUrl}/predictions/get_prediction/$predictionId';
         final response = await http
             .get(Uri.parse(apiUrl), headers: {'Authorization': 'Bearer $token'})
             .timeout(
@@ -195,21 +180,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
               },
             );
 
-        developer.log(
-          'Response status: ${response.statusCode}',
-          name: 'ResultsScreen',
-        );
-        developer.log('Response body: ${response.body}', name: 'ResultsScreen');
-
         if (response.statusCode == 200) {
           final dynamic data = jsonDecode(response.body);
           if (data['validation_status'] == 'pending' ||
               data['prediction_status'] == 'pending') {
             attempts++;
-            developer.log(
-              'Prediction still pending, retrying... (Attempt ${attempts + 1})',
-              name: 'ResultsScreen',
-            );
             await Future.delayed(pollingInterval);
             continue;
           } else if (data['validation_status'] == 'failed') {
@@ -246,7 +221,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                             ),
                           )
                           .toList() ??
-                      [], // Keep as List<JewelryRecommendation>
+                      [],
                   'face_image_path': data['face_image_path'],
                   'jewelry_image_path': data['jewelry_image_path'],
                   'model': 'prediction1',
@@ -275,7 +250,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                             ),
                           )
                           .toList() ??
-                      [], // Keep as List<JewelryRecommendation>
+                      [],
                   'face_image_path': data['face_image_path'],
                   'jewelry_image_path': data['jewelry_image_path'],
                   'model': 'prediction2',
@@ -291,12 +266,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               ];
               _isLoading = false;
             });
-            developer.log(
-              'Prediction fetched successfully: $_predictions',
-              name: 'ResultsScreen',
-            );
 
-            // Check if the predictions are fallback values
             if (_isFallbackPrediction()) {
               setState(() {
                 _errorMessage =
@@ -330,10 +300,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
               _errorMessage = "Failed to fetch result: $errorDetail";
             }
           });
-          developer.log(
-            'Fetch failed with status ${response.statusCode}: $errorDetail',
-            name: 'ResultsScreen',
-          );
           return;
         }
       } catch (e) {
@@ -350,7 +316,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
             _errorMessage = "Error fetching result: $e";
           }
         });
-        developer.log('Fetch error: $e', name: 'ResultsScreen');
         return;
       }
     }
@@ -359,14 +324,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
       _isLoading = false;
       _errorMessage = "Prediction took too long to complete. Please try again.";
     });
-    developer.log(
-      'Prediction timed out after $maxAttempts attempts',
-      name: 'ResultsScreen',
-    );
   }
 
   bool _isFallbackPrediction() {
-    // Check if the predictions are fallback values
     for (var prediction in _predictions) {
       if (prediction['category'] == 'Not Assigned' ||
           (prediction['recommendations'] as List).isEmpty ||
@@ -397,7 +357,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     final feedbackType =
         recommendationName == null ? "prediction" : "recommendation";
     final apiUrl =
-        'https://jewelify-server.onrender.com/predictions/feedback/$feedbackType';
+        '${ApiConstants.baseUrl}/predictions/feedback/$feedbackType';
 
     try {
       var request = http.MultipartRequest('POST', Uri.parse(apiUrl));
@@ -409,31 +369,25 @@ class _ResultsScreenState extends State<ResultsScreen> {
       }
       request.fields['score'] = review;
 
-      developer.log(
-        'Submitting feedback to $apiUrl with fields: ${request.fields}',
-        name: 'ResultsScreen',
-      );
-
       final response = await request.send().timeout(
         const Duration(seconds: 30),
         onTimeout: () {
           throw Exception("Request timed out while submitting feedback");
         },
       );
-      final responseBody = await response.stream.bytesToString();
+      await response.stream.bytesToString();
 
-      developer.log(
-        'Feedback response: ${response.statusCode} - $responseBody',
-        name: 'ResultsScreen',
-      );
-
+      if (!mounted) return;
       if (response.statusCode == 200) {
         if (recommendationName == null) {
           setState(() {
             _feedbackSubmitted[model] = true;
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Feedback submitted successfully!")),
+            SnackBar(
+              content: const Text("Feedback submitted successfully!"),
+              backgroundColor: AppTheme.primary,
+            ),
           );
         }
       } else if (response.statusCode == 401) {
@@ -443,10 +397,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
         });
         Navigator.pushReplacementNamed(context, '/login');
       } else {
-        developer.log(
-          'Failed to submit feedback: ${response.statusCode} - $responseBody',
-          name: 'ResultsScreen',
-        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Failed to submit feedback. Please try again."),
@@ -454,7 +404,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         );
       }
     } catch (e) {
-      developer.log('Error submitting feedback: $e', name: 'ResultsScreen');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Error submitting feedback. Please try again."),
@@ -470,57 +420,33 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text(
-          "Your Result",
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
+        backgroundColor: AppTheme.background,
+        foregroundColor: AppTheme.appNameBrown,
         elevation: 0,
-        backgroundColor: const Color(0xFFEDE7F6),
+        title: Text('Your Result', style: AppTheme.titleStyle),
       ),
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFEDE7F6), Color(0xFFEDE7F6)],
-              ),
-            ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child:
-                    _isLoading
-                        ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const CircularProgressIndicator(),
-                              const SizedBox(height: 16),
-                              Text(_loadingMessage),
-                            ],
-                          ),
-                        )
-                        : _errorMessage.isNotEmpty
-                        ? _buildErrorWidget(theme)
-                        : _buildResultWidget(theme),
-              ),
-            ),
-          ),
-        ],
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child:
+              _isLoading
+                  ? _buildSkeletonWidget()
+                  : _errorMessage.isNotEmpty
+                  ? _buildErrorWidget()
+                  : _buildResultWidget(),
+        ),
       ),
       bottomNavigationBar:
           _predictions.isNotEmpty && !_canProceed()
               ? Container(
                 padding: const EdgeInsets.all(16.0),
-                color: const Color(0xFFEDE7F6),
-                child: const Text(
+                color: AppTheme.softSurface,
+                child: Text(
                   "Please provide feedback for both models to proceed.",
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.mutedText),
                   textAlign: TextAlign.center,
                 ),
               )
@@ -528,9 +454,32 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
-  Widget _buildResultWidget(ThemeData theme) {
+  Widget _buildSkeletonWidget() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _loadingMessage,
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.mutedText),
+        ),
+        const SizedBox(height: 16),
+        const SkeletonHistoryItem(),
+        const SizedBox(height: 12),
+        const SkeletonHistoryItem(),
+        const SizedBox(height: 12),
+        const SkeletonHistoryItem(),
+      ],
+    );
+  }
+
+  Widget _buildResultWidget() {
     if (_predictions.isEmpty) {
-      return const Center(child: Text("No prediction data available"));
+      return Center(
+        child: Text(
+          "No prediction data available",
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.mutedText),
+        ),
+      );
     }
 
     return Column(
@@ -540,67 +489,24 @@ class _ResultsScreenState extends State<ResultsScreen> {
             itemCount: _predictions.length,
             itemBuilder: (context, index) {
               final prediction = _predictions[index];
-              try {
-                // Validate prediction data before passing to PredictionModule
-                if (prediction['score'] == null ||
-                    prediction['category'] == null ||
-                    prediction['recommendations'] == null ||
-                    prediction['face_image_path'] == null ||
-                    prediction['jewelry_image_path'] == null ||
-                    prediction['model'] == null ||
-                    prediction['feedback_required'] == null ||
-                    prediction['overall_feedback'] == null) {
-                  developer.log(
-                    'Invalid prediction data at index $index: $prediction',
-                    name: 'ResultsScreen',
-                  );
-                  return const SizedBox.shrink(); // Return an empty widget to avoid rendering errors
-                }
-
-                return Builder(
-                  builder: (context) {
-                    try {
-                      return PredictionModule(
-                        modelName:
-                            index == 0 ? "Model 1 (XGBoost)" : "Model 2 (MLP)",
-                        prediction: prediction,
-                        predictionId: _predictionId ?? '',
-                        onFeedbackSubmit: _submitFeedback,
-                      );
-                    } catch (e, stackTrace) {
-                      developer.log(
-                        'Error rendering PredictionModule at index $index: $e',
-                        name: 'ResultsScreen',
-                        error: e,
-                        stackTrace: stackTrace,
-                      );
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        color: Colors.red.withOpacity(0.1),
-                        child: Text(
-                          'Error rendering prediction: $e',
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      );
-                    }
-                  },
-                );
-              } catch (e, stackTrace) {
-                developer.log(
-                  'Error processing prediction at index $index: $e',
-                  name: 'ResultsScreen',
-                  error: e,
-                  stackTrace: stackTrace,
-                );
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.red.withOpacity(0.1),
-                  child: Text(
-                    'Error processing prediction: $e',
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                );
+              if (prediction['score'] == null ||
+                  prediction['category'] == null ||
+                  prediction['recommendations'] == null ||
+                  prediction['face_image_path'] == null ||
+                  prediction['jewelry_image_path'] == null ||
+                  prediction['model'] == null ||
+                  prediction['feedback_required'] == null ||
+                  prediction['overall_feedback'] == null) {
+                return const SizedBox.shrink();
               }
+
+              return PredictionModule(
+                modelName:
+                    index == 0 ? "Model 1 (XGBoost)" : "Model 2 (MLP)",
+                prediction: prediction,
+                predictionId: _predictionId ?? '',
+                onFeedbackSubmit: _submitFeedback,
+              );
             },
           ),
         ),
@@ -617,13 +523,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         : null,
                 icon: const Icon(Icons.refresh),
                 label: const Text("Try Again"),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  side: BorderSide(color: theme.colorScheme.primary),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+                style: AppTheme.outlineButton,
               ),
             ),
             const SizedBox(width: 16),
@@ -638,12 +538,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         : null,
                 icon: const Icon(Icons.home),
                 label: const Text("Home"),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+                style: AppTheme.primaryButton,
               ),
             ),
           ],
@@ -652,21 +547,21 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
-  Widget _buildErrorWidget(ThemeData theme) {
+  Widget _buildErrorWidget() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.error_outline, size: 80, color: theme.colorScheme.error),
+        Icon(Icons.error_outline, size: 80, color: Colors.red.shade700),
         const SizedBox(height: 24),
         Text(
           "Error Fetching Result",
-          style: theme.textTheme.headlineMedium,
+          style: AppTheme.displayMedium,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
         Text(
           _errorMessage,
-          style: theme.textTheme.bodyLarge,
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.mutedText),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -675,30 +570,14 @@ class _ResultsScreenState extends State<ResultsScreen> {
           children: [
             ElevatedButton(
               onPressed: _fetchResult,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: AppTheme.primaryButton,
               child: const Text("Retry"),
             ),
             const SizedBox(width: 16),
             OutlinedButton(
               onPressed:
                   () => Navigator.pushReplacementNamed(context, '/upload'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: AppTheme.outlineButton,
               child: const Text("Go Back"),
             ),
           ],

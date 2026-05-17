@@ -4,11 +4,12 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
 import 'dart:io';
 import 'package:provider/provider.dart';
-import 'package:google_ml_kit/google_ml_kit.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../providers/auth_provider.dart';
 import '../screens/image_storage.dart';
 import '../screens/results_screen.dart';
-import 'dart:developer' as developer;
+import '../constants/api.dart';
+import '../screens/app_theme.dart';
 
 class ProcessingScreen extends StatefulWidget {
   final Map<String, dynamic>? arguments;
@@ -50,12 +51,11 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     const maxRetries = 2;
     var retries = 0;
 
-    // Check for long wait after 30 seconds
-    Future.delayed(const Duration(seconds: 30), () {
+    Future.delayed(const Duration(seconds: 8), () {
       if (mounted && !_isCancelled && !_isError && !_isLongWait) {
         setState(() {
           _isLongWait = true;
-          _currentStatus = "Server is waking up, please wait...";
+          _currentStatus = "Server is warming up, please wait a moment...";
         });
       }
     });
@@ -75,7 +75,6 @@ class _ProcessingScreenState extends State<ProcessingScreen>
           rethrow;
         }
         await Future.delayed(const Duration(seconds: 5));
-        developer.log('Retrying request (attempt ${retries + 1})');
       }
     }
     throw Exception("Failed to send request after $maxRetries attempts");
@@ -112,7 +111,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
 
     setState(() => _currentStatus = "Uploading images...");
 
-    const apiUrl = 'https://jewelify-server.onrender.com/predictions/predict';
+    final apiUrl = '${ApiConstants.baseUrl}/predictions/predict';
     var request = http.MultipartRequest('POST', Uri.parse(apiUrl));
 
     try {
@@ -155,70 +154,23 @@ class _ProcessingScreenState extends State<ProcessingScreen>
       request.fields['face_image_path'] = facePath.split('/').last;
       request.fields['jewelry_image_path'] = jewelryPath.split('/').last;
 
-      // Enhanced logging for debugging
-      developer.log('Sending request to $apiUrl', name: 'ProcessingScreen');
-      developer.log(
-        'Request headers: ${request.headers}',
-        name: 'ProcessingScreen',
-      );
-      developer.log(
-        'Request fields: ${request.fields}',
-        name: 'ProcessingScreen',
-      );
-      developer.log(
-        'Request files: ${request.files.map((file) => file.field).toList()}',
-        name: 'ProcessingScreen',
-      );
-
       setState(() => _currentStatus = "Initiating prediction tasks...");
 
       final response = await _sendRequestWithRetry(request);
       final responseBody = await response.stream.bytesToString();
 
-      developer.log(
-        'Response status: ${response.statusCode}',
-        name: 'ProcessingScreen',
-      );
-      developer.log('Response body: $responseBody', name: 'ProcessingScreen');
-
       if (response.statusCode == 200) {
         try {
           final result = jsonDecode(responseBody);
           setState(() => _currentStatus = "Prediction tasks initiated!");
-          developer.log(
-            'Prediction tasks initiated with result: $result',
-            name: 'ProcessingScreen',
-          );
-          try {
-            if (mounted && !_isCancelled) {
-              developer.log(
-                'Navigating to ResultsScreen',
-                name: 'ProcessingScreen',
-              );
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (context) => ResultsScreen(initialResult: result),
-                ),
-              );
-              developer.log('Navigation executed', name: 'ProcessingScreen');
-            } else {
-              developer.log(
-                'Navigation skipped: mounted=$mounted, isCancelled=$_isCancelled',
-                name: 'ProcessingScreen',
-              );
-            }
-          } catch (e) {
-            developer.log('Navigation error: $e', name: 'ProcessingScreen');
-            setState(() {
-              _isError = true;
-              _errorMessage = "Navigation error: $e";
-            });
+          if (mounted && !_isCancelled) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => ResultsScreen(initialResult: result),
+              ),
+            );
           }
         } catch (e) {
-          developer.log(
-            'Error parsing response body: $e',
-            name: 'ProcessingScreen',
-          );
           setState(() {
             _isError = true;
             _errorMessage = "Failed to parse server response: $e";
@@ -251,7 +203,6 @@ class _ProcessingScreenState extends State<ProcessingScreen>
         });
       }
     } catch (e) {
-      developer.log('Error processing images: $e', name: 'ProcessingScreen');
       if (mounted) {
         setState(() {
           _isError = true;
@@ -271,36 +222,15 @@ class _ProcessingScreenState extends State<ProcessingScreen>
   }
 
   Future<bool> _validateImages(File faceFile, File jewelryFile) async {
-    developer.log('Starting image validation', name: 'ProcessingScreen');
-
-    // Validate face image using Google ML Kit
     final inputImage = InputImage.fromFile(faceFile);
-    final faceDetector = GoogleMlKit.vision.faceDetector();
+    final faceDetector = FaceDetector(options: FaceDetectorOptions());
     final faces = await faceDetector.processImage(inputImage);
     await faceDetector.close();
 
-    if (faces.isEmpty) {
-      developer.log(
-        'No faces detected in the face image',
-        name: 'ProcessingScreen',
-      );
-      return false;
-    }
-    developer.log('Faces detected: ${faces.length}', name: 'ProcessingScreen');
+    if (faces.isEmpty) return false;
 
-    // Validate jewelry image by checking its size
     final jewelryBytes = await jewelryFile.readAsBytes();
-    if (jewelryBytes.length < 1024) {
-      developer.log(
-        'Jewelry image is too small: ${jewelryBytes.length} bytes',
-        name: 'ProcessingScreen',
-      );
-      return false;
-    }
-    developer.log(
-      'Jewelry image size is valid: ${jewelryBytes.length} bytes',
-      name: 'ProcessingScreen',
-    );
+    if (jewelryBytes.length < 1024) return false;
 
     return true;
   }
@@ -315,38 +245,24 @@ class _ProcessingScreenState extends State<ProcessingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return WillPopScope(
-      onWillPop: () async {
-        _cancelProcessing();
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _cancelProcessing();
       },
       child: Scaffold(
+        backgroundColor: AppTheme.background,
         appBar: AppBar(
-          title: const Text(
-            "Processing",
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
+          backgroundColor: AppTheme.background,
+          foregroundColor: AppTheme.appNameBrown,
+          elevation: 0,
+          title: Text('Processing', style: AppTheme.titleStyle),
         ),
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors:
-                  theme.brightness == Brightness.dark
-                      ? [theme.colorScheme.surface, theme.colorScheme.surface]
-                      : [theme.colorScheme.surface, theme.colorScheme.surface],
-            ),
-          ),
+        body: SafeArea(
           child: Center(
             child: Padding(
               padding: const EdgeInsets.all(32.0),
-              child:
-                  _isError
-                      ? _buildErrorWidget(theme)
-                      : _buildLoadingWidget(theme),
+              child: _isError ? _buildErrorWidget() : _buildLoadingWidget(),
             ),
           ),
         ),
@@ -354,66 +270,68 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     );
   }
 
-  Widget _buildLoadingWidget(ThemeData theme) {
+  Widget _buildLoadingWidget() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         RotationTransition(
           turns: _animationController,
-          child: Icon(
-            Icons.diamond,
-            size: 100,
-            color: theme.colorScheme.primary,
-          ),
+          child: Icon(Icons.diamond, size: 100, color: AppTheme.primary),
         ),
         const SizedBox(height: 48),
         Text(
           "Analyzing Your Style...",
-          style: theme.textTheme.headlineMedium,
+          style: AppTheme.displayMedium,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
         Text(
           _currentStatus,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-          ),
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.mutedText),
           textAlign: TextAlign.center,
         ),
+        if (_isLongWait) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.softSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Text(
+              "Render free tier may take up to 60 seconds on first request.",
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.mutedText),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
         const SizedBox(height: 32),
         OutlinedButton.icon(
           onPressed: _cancelProcessing,
           icon: const Icon(Icons.cancel),
           label: const Text("Cancel"),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            side: BorderSide(color: theme.colorScheme.error),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+          style: AppTheme.outlineButton,
         ),
       ],
     );
   }
 
-  Widget _buildErrorWidget(ThemeData theme) {
+  Widget _buildErrorWidget() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.error_outline, size: 100, color: theme.colorScheme.error),
+        Icon(Icons.error_outline, size: 100, color: Colors.red.shade700),
         const SizedBox(height: 48),
         Text(
           "Processing Error",
-          style: theme.textTheme.headlineMedium,
+          style: AppTheme.displayMedium,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
         Text(
           _errorMessage,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-          ),
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.mutedText),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
@@ -432,30 +350,14 @@ class _ProcessingScreenState extends State<ProcessingScreen>
               },
               icon: const Icon(Icons.refresh),
               label: const Text("Retry"),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: AppTheme.primaryButton,
             ),
             const SizedBox(width: 16),
             OutlinedButton.icon(
               onPressed: _cancelProcessing,
               icon: const Icon(Icons.arrow_back),
               label: const Text("Go Back"),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: AppTheme.outlineButton,
             ),
           ],
         ),

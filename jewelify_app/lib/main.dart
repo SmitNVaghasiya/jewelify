@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:jewelify/screens/temp_registration.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/upload_screen.dart';
 import 'screens/processing_screen.dart';
@@ -68,6 +69,7 @@ class _MyAppState extends State<MyApp> {
                 ),
             '/results': (context) => const ResultsScreen(),
             '/history': (context) => const HistoryScreen(),
+            '/forgot-password': (context) => const ForgotPasswordScreen(),
           },
           debugShowCheckedModeBanner: false,
         );

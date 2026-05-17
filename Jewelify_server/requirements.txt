@@ -16,7 +16,7 @@ pyyaml==6.0.1
 requests==2.32.3
 bcrypt==4.2.0
 xgboost==2.1.1
-twilio==9.5.0
+slowapi==0.1.9
 opencv-python==4.11.0.86
 aiohttp==3.10.5
 motor==3.7.0

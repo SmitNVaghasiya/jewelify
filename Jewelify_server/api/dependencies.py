@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from bson import ObjectId
+from bson.errors import InvalidId
 from services.database import get_db_client
 import os
 from dotenv import load_dotenv
@@ -27,7 +28,19 @@ if ALGORITHM not in ["HS256", "HS384", "HS512"]:
     logger.error(f"Invalid JWT_ALGORITHM: {ALGORITHM}. Must be one of HS256, HS384, or HS512")
     raise ValueError(f"Invalid JWT_ALGORITHM: {ALGORITHM}. Must be one of HS256, HS384, or HS512")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+
+def validate_object_id(id_str: str) -> ObjectId:
+    """Validate and convert a string to a MongoDB ObjectId.
+
+    Raises HTTP 400 if the string is not a valid ObjectId.
+    """
+    try:
+        return ObjectId(id_str)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
@@ -36,7 +49,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     logger.debug(f"Received token for validation: {token[:10]}... (truncated for security)")
-    
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
@@ -54,7 +67,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             logger.error("Failed to get MongoDB client connection")
             raise HTTPException(status_code=500, detail="Failed to connect to the database")
         db = client["jewelify"]
-        user = db["users"].find_one({"_id": ObjectId(user_id)})
+        user = db["users"].find_one({"_id": validate_object_id(user_id)})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Database error while fetching user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error while fetching user: {str(e)}")
@@ -62,6 +77,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     if user is None:
         logger.warning(f"User with ID {user_id} not found in the database")
         raise credentials_exception
-    
+
     logger.info(f"User {user_id} authenticated successfully")
     return user

@@ -6,6 +6,9 @@ import '../providers/auth_provider.dart';
 import '../models/jewelry_recommendation.dart';
 import '../widgets/expandable_item.dart';
 import '../widgets/prediction_module.dart';
+import '../constants/api.dart';
+import '../screens/app_theme.dart';
+import '../widgets/skeleton_loader.dart';
 
 class HistoryItem {
   final String id;
@@ -147,7 +150,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final response = await http
           .get(
             Uri.parse(
-              'https://jewelify-server.onrender.com/history/?limit=$_limit&skip=$_skip',
+              '${ApiConstants.baseUrl}/history/?limit=$_limit&skip=$_skip',
             ),
             headers: {'Authorization': 'Bearer $token'},
           )
@@ -185,6 +188,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           _isLoading = false;
         });
         authProvider.logout();
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/login');
       } else {
         setState(() {
@@ -221,7 +225,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final feedbackType =
         recommendationName == null ? "prediction" : "recommendation";
     final apiUrl =
-        'https://jewelify-server.onrender.com/predictions/feedback/$feedbackType';
+        '${ApiConstants.baseUrl}/predictions/feedback/$feedbackType';
 
     try {
       var request = http.MultipartRequest('POST', Uri.parse(apiUrl));
@@ -239,12 +243,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
           throw Exception("Request timed out while submitting feedback");
         },
       );
-      final responseBody = await response.stream.bytesToString();
+      await response.stream.bytesToString();
 
+      if (!mounted) return;
       if (response.statusCode != 200) {
-        print(
-          'Failed to submit feedback: ${response.statusCode} - $responseBody',
-        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Failed to submit feedback. Please try again."),
@@ -256,7 +258,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         );
       }
     } catch (e) {
-      print('Error submitting feedback: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Error submitting feedback. Please try again."),
@@ -268,11 +270,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEDE7F6),
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFEDE7F6),
-        foregroundColor: Colors.black,
-        title: const Text('History'),
+        backgroundColor: AppTheme.background,
+        foregroundColor: AppTheme.appNameBrown,
+        elevation: 0,
+        title: Text('History', style: AppTheme.titleStyle),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -287,16 +290,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Your Prediction History',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    'YOUR PREDICTION HISTORY',
+                    style: AppTheme.labelUppercase,
                   ),
                   const SizedBox(height: 16),
                   Expanded(
                     child:
                         _isLoading && _history.isEmpty
-                            ? const Center(child: CircularProgressIndicator())
+                            ? ListView(
+                              children: const [
+                                SkeletonHistoryItem(),
+                                SkeletonHistoryItem(),
+                                SkeletonHistoryItem(),
+                                SkeletonHistoryItem(),
+                                SkeletonHistoryItem(),
+                              ],
+                            )
                             : _errorMessage != null
                             ? Center(
                               child: Column(
@@ -310,21 +319,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   const SizedBox(height: 20),
                                   ElevatedButton(
                                     onPressed: () => _fetchHistory(),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFEDE7F6),
-                                      foregroundColor: Colors.black,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
+                                    style: AppTheme.primaryButton,
                                     child: const Text('Retry'),
                                   ),
                                 ],
                               ),
                             )
                             : _history.isEmpty
-                            ? const Center(child: Text('No history exists'))
+                            ? Center(
+                              child: Text(
+                                'No history exists',
+                                style: AppTheme.bodyMedium.copyWith(
+                                  color: AppTheme.mutedText,
+                                ),
+                              ),
+                            )
                             : RefreshIndicator(
+                              color: AppTheme.primary,
                               onRefresh: () => _fetchHistory(),
                               child: ListView.builder(
                                 cacheExtent: 1000,
@@ -341,117 +352,112 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   }
 
                                   final item = _history[index];
-                                  return ExpandableItem(
-                                    header: Padding(
-                                      padding: const EdgeInsets.all(16.0),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  item.date,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleMedium
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Validation: ${item.validationStatus}',
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.bodyLarge?.copyWith(
-                                                    color:
-                                                        item.validationStatus ==
-                                                                'failed'
-                                                            ? Colors.red
-                                                            : null,
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    decoration: AppTheme.cardDecoration,
+                                    child: ExpandableItem(
+                                      header: Padding(
+                                        padding: const EdgeInsets.all(16.0),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    item.date,
+                                                    style: AppTheme.bodyMedium.copyWith(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppTheme.headingBrown,
+                                                    ),
                                                   ),
-                                                ),
-                                                Text(
-                                                  'Prediction: ${item.predictionStatus}',
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.bodyLarge?.copyWith(
-                                                    color:
-                                                        item.predictionStatus ==
-                                                                'failed'
-                                                            ? Colors.red
-                                                            : null,
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    'Validation: ${item.validationStatus}',
+                                                    style: AppTheme.bodySmall.copyWith(
+                                                      color:
+                                                          item.validationStatus ==
+                                                                  'failed'
+                                                              ? Colors.red
+                                                              : AppTheme.mutedText,
+                                                    ),
                                                   ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Model 1: ${item.prediction1['category']}',
-                                                  style:
-                                                      Theme.of(
-                                                        context,
-                                                      ).textTheme.bodyLarge,
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Score: ${item.prediction1['score'].toStringAsFixed(1)}%',
-                                                  style:
-                                                      Theme.of(
-                                                        context,
-                                                      ).textTheme.bodyLarge,
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Model 2: ${item.prediction2['category']}',
-                                                  style:
-                                                      Theme.of(
-                                                        context,
-                                                      ).textTheme.bodyLarge,
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Score: ${item.prediction2['score'].toStringAsFixed(1)}%',
-                                                  style:
-                                                      Theme.of(
-                                                        context,
-                                                      ).textTheme.bodyLarge,
-                                                ),
-                                              ],
+                                                  Text(
+                                                    'Prediction: ${item.predictionStatus}',
+                                                    style: AppTheme.bodySmall.copyWith(
+                                                      color:
+                                                          item.predictionStatus ==
+                                                                  'failed'
+                                                              ? Colors.red
+                                                              : AppTheme.mutedText,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    'Model 1: ${item.prediction1['category']}',
+                                                    style: AppTheme.bodySmall.copyWith(
+                                                      color: AppTheme.mutedText,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    'Score: ${item.prediction1['score'].toStringAsFixed(1)}%',
+                                                    style: AppTheme.bodySmall.copyWith(
+                                                      color: AppTheme.primary,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    'Model 2: ${item.prediction2['category']}',
+                                                    style: AppTheme.bodySmall.copyWith(
+                                                      color: AppTheme.mutedText,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    'Score: ${item.prediction2['score'].toStringAsFixed(1)}%',
+                                                    style: AppTheme.bodySmall.copyWith(
+                                                      color: AppTheme.primary,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
+                                            Icon(
+                                              item.isExpanded
+                                                  ? Icons.keyboard_arrow_up
+                                                  : Icons.keyboard_arrow_down,
+                                              color: AppTheme.appNameBrown,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      content: Column(
+                                        children: [
+                                          PredictionModule(
+                                            modelName: "Model 1 (XGBoost)",
+                                            prediction: item.prediction1,
+                                            predictionId: item.id,
+                                            onFeedbackSubmit: _submitFeedback,
                                           ),
-                                          Icon(
-                                            item.isExpanded
-                                                ? Icons.keyboard_arrow_up
-                                                : Icons.keyboard_arrow_down,
-                                            color: Colors.black,
+                                          const SizedBox(height: 16),
+                                          PredictionModule(
+                                            modelName: "Model 2 (MLP)",
+                                            prediction: item.prediction2,
+                                            predictionId: item.id,
+                                            onFeedbackSubmit: _submitFeedback,
                                           ),
                                         ],
                                       ),
+                                      isExpanded: item.isExpanded,
+                                      onToggle:
+                                          (expanded) => setState(
+                                            () => item.isExpanded = expanded,
+                                          ),
                                     ),
-                                    content: Column(
-                                      children: [
-                                        PredictionModule(
-                                          modelName: "Model 1 (XGBoost)",
-                                          prediction: item.prediction1,
-                                          predictionId: item.id,
-                                          onFeedbackSubmit: _submitFeedback,
-                                        ),
-                                        const SizedBox(height: 16),
-                                        PredictionModule(
-                                          modelName: "Model 2 (MLP)",
-                                          prediction: item.prediction2,
-                                          predictionId: item.id,
-                                          onFeedbackSubmit: _submitFeedback,
-                                        ),
-                                      ],
-                                    ),
-                                    isExpanded: item.isExpanded,
-                                    onToggle:
-                                        (expanded) => setState(
-                                          () => item.isExpanded = expanded,
-                                        ),
                                   );
                                 },
                               ),

@@ -1,243 +1,179 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Colors from both files, prioritizing and consolidating
-  static const Color primaryColor = Color(
-    0xFF2D4356,
-  ); // Dark blue from both files
-  static const Color secondaryLight = Color(0xFF81D4FA); // From first file
-  static const Color secondaryDark = Color(0xFFB3E5FC); // From first file
-  static const Color backgroundLight = Color(0xFFF5F5F5); // From second file
-  static const Color backgroundDark = Color(0xFF2E2E2E); // From first file
-  static const Color surfaceLight = Color(0xFFFFFFFF); // From first file
-  static const Color surfaceDark = Color(0xFF3A3A3A); // From first file
-  static const Color errorLight = Color(0xFFE57373); // From first file
-  static const Color errorDark = Color(0xFFEF9A9A); // From first file
-  static const Color accentColor = Color(
-    0xFF333333,
-  ); // From second file (used for text)
-  static const Color dividerColor = Color(0xFFEEEEEE); // From second file
-  static const Color inputBorderColor = Color(
-    0xFFE0E0E0,
-  ); // Renamed for clarity
-  static const Color focusedBorderColor = Color(
-    0xFFBDBDBD,
-  ); // Renamed for clarity
+  // ── Terracotta & Cream Palette ──────────────────────────────────────────
+  static const Color background     = Color(0xFFFDF6EF);
+  static const Color surface        = Color(0xFFFFFFFF);
+  static const Color softSurface    = Color(0xFFF5EDE4);
+  static const Color border         = Color(0xFFEDE0D4);
+  static const Color primary        = Color(0xFFB5451B);
+  static const Color primaryDark    = Color(0xFF8B3214);
+  static const Color headingBrown   = Color(0xFF3D1F15);
+  static const Color appNameBrown   = Color(0xFF6B3A2A);
+  static const Color mutedText      = Color(0xFFA07060);
+  static const Color errorColor     = Color(0xFFD32F2F);
 
-  // Text colors
-  static const Color textPrimaryLight = Color(0xFF212121); // From first file
-  static const Color textSecondaryLight = Color(0xFF757575); // From first file
-  static const Color textPrimaryDark = Color(0xFFE0E0E0); // From first file
-  static const Color textSecondaryDark = Color(0xFFB0B0B0); // From first file
+  static const Color backgroundDark  = Color(0xFF1A0F09);
+  static const Color surfaceDark     = Color(0xFF2C1A12);
+  static const Color softSurfaceDark = Color(0xFF3A2318);
+  static const Color borderDark      = Color(0xFF4A3228);
+  static const Color mutedTextDark   = Color(0xFF8A6050);
 
-  // Text styles (combining both files)
-  static const TextStyle titleStyle = TextStyle(
-    fontSize: 22.0,
-    fontWeight: FontWeight.bold,
-    color: accentColor, // From second file
-    fontFamily: 'Poppins', // Default to Poppins
+  // ── Typography helpers ──────────────────────────────────────────────────
+  static TextStyle get displayLarge => GoogleFonts.cormorantGaramond(
+    fontSize: 28, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic,
+    color: appNameBrown, letterSpacing: 0.5,
   );
 
-  static const TextStyle categoryStyle = TextStyle(
-    fontSize: 18.0,
-    fontWeight: FontWeight.w600,
-    color: accentColor, // From second file
-    fontFamily: 'Poppins', // Default to Poppins
+  static TextStyle get displayMedium => GoogleFonts.cormorantGaramond(
+    fontSize: 22, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic,
+    color: headingBrown,
   );
 
-  static const TextStyle itemTitleStyle = TextStyle(
-    fontSize: 16.0,
-    fontWeight: FontWeight.w500,
-    color: accentColor, // From second file
-    fontFamily: 'Poppins', // Default to Poppins
+  static TextStyle get titleStyle => GoogleFonts.cormorantGaramond(
+    fontSize: 18, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic,
+    color: headingBrown,
   );
 
-  static const TextStyle scoreStyle = TextStyle(
-    fontSize: 14.0,
-    fontWeight: FontWeight.w500,
-    color: primaryColor, // From second file
-    fontFamily: 'Poppins', // Default to Poppins
+  static TextStyle get labelUppercase => GoogleFonts.poppins(
+    fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 2.0, color: mutedText,
   );
 
-  // Button styles (from second file)
-  static final ButtonStyle primaryButtonStyle = ElevatedButton.styleFrom(
-    backgroundColor: primaryColor,
+  static TextStyle get bodyMedium => GoogleFonts.poppins(
+    fontSize: 14, fontWeight: FontWeight.w400, color: headingBrown,
+  );
+
+  static TextStyle get bodySmall => GoogleFonts.poppins(
+    fontSize: 12, fontWeight: FontWeight.w400, color: mutedText,
+  );
+
+  // ── Button Styles ────────────────────────────────────────────────────────
+  static ButtonStyle get primaryButton => ElevatedButton.styleFrom(
+    backgroundColor: primary,
     foregroundColor: Colors.white,
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    elevation: 0,
+    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+    textStyle: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 1.5),
   );
 
-  static final ButtonStyle secondaryButtonStyle = OutlinedButton.styleFrom(
-    foregroundColor: primaryColor,
-    side: const BorderSide(color: primaryColor),
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  static ButtonStyle get outlineButton => OutlinedButton.styleFrom(
+    foregroundColor: primary,
+    side: const BorderSide(color: primary, width: 1.5),
+    padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 24),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+    textStyle: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 1.5),
   );
 
-  // Card decoration (new addition to fix the error)
-  static final BoxDecoration cardDecoration = BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(8),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withOpacity(0.05),
-        blurRadius: 4,
-        offset: const Offset(0, 2),
-      ),
-    ],
+  // ── Card Decorations ─────────────────────────────────────────────────────
+  static BoxDecoration get cardDecoration => BoxDecoration(
+    color: surface,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: border),
   );
 
-  // ThemeData for light and dark modes
-  static ThemeData lightTheme = ThemeData(
-    brightness: Brightness.light,
+  static BoxDecoration get softCardDecoration => BoxDecoration(
+    color: softSurface,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: border),
+  );
+
+  // ── ThemeData ────────────────────────────────────────────────────────────
+  static ThemeData get lightTheme => ThemeData(
     useMaterial3: true,
-    fontFamily: 'Poppins', // Default font for the app is Poppins
-    textTheme: TextTheme(
-      displayLarge: TextStyle(fontFamily: 'Poppins'),
-      headlineMedium: TextStyle(fontFamily: 'Poppins'),
-      titleLarge: TextStyle(fontFamily: 'Poppins'),
-      titleMedium: TextStyle(fontFamily: 'Poppins'),
-      bodyLarge: TextStyle(fontFamily: 'Poppins'),
-      bodyMedium: TextStyle(fontFamily: 'Poppins'),
-      labelLarge: TextStyle(fontFamily: 'Poppins'),
-    ),
-    colorScheme: ColorScheme(
+    textTheme: GoogleFonts.poppinsTextTheme(),
+    scaffoldBackgroundColor: background,
+    colorScheme: const ColorScheme(
       brightness: Brightness.light,
-      primary: primaryColor, // From both files
+      primary: primary,
       onPrimary: Colors.white,
-      secondary: secondaryLight, // From first file
+      secondary: appNameBrown,
       onSecondary: Colors.white,
-      error: errorLight, // From first file
+      error: errorColor,
       onError: Colors.white,
-      surface: surfaceLight, // From first file
-      onSurface: textPrimaryLight, // Explicitly set for clarity
+      surface: surface,
+      onSurface: headingBrown,
     ),
-    scaffoldBackgroundColor:
-        backgroundLight, // From second file, aligned with first
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white, // From first file
-      foregroundColor: primaryColor, // From both files
-      elevation: 0, // From first file
-      centerTitle: true,
-      titleTextStyle: TextStyle(
-        color: textPrimaryLight, // From first file
-        fontSize: 20,
-        fontWeight: FontWeight.bold,
-        fontFamily: 'Poppins', // Use Poppins
+    appBarTheme: AppBarTheme(
+      backgroundColor: background,
+      foregroundColor: appNameBrown,
+      elevation: 0,
+      centerTitle: false,
+      titleTextStyle: GoogleFonts.cormorantGaramond(
+        fontSize: 20, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic,
+        color: appNameBrown,
       ),
     ),
-    cardTheme: CardTheme(
-      elevation: 4, // Adjusted from first file
+    cardTheme: CardThemeData(
+      color: surface,
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ), // From first file, adjusted to match cardDecoration radius
-      shadowColor: Colors.black12, // From first file
-      color: surfaceLight, // From first file
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: border),
+      ),
     ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: primaryButtonStyle, // Reference the static style defined above
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: secondaryButtonStyle, // Reference the static style defined above
-    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(style: primaryButton),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: outlineButton),
     inputDecorationTheme: InputDecorationTheme(
-      border: UnderlineInputBorder(
-        borderSide: BorderSide(color: inputBorderColor), // Renamed for clarity
+      filled: false,
+      enabledBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: border, width: 1.5),
       ),
-      enabledBorder: UnderlineInputBorder(
-        borderSide: BorderSide(color: inputBorderColor), // Renamed for clarity
+      focusedBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: primary, width: 1.5),
       ),
-      focusedBorder: UnderlineInputBorder(
-        borderSide: BorderSide(
-          color: focusedBorderColor,
-        ), // Renamed for clarity
+      errorBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: errorColor),
       ),
-      hintStyle: TextStyle(
-        color: textSecondaryLight.withOpacity(0.6),
-        fontSize: 14,
-        fontFamily: 'Poppins', // Use Poppins
+      focusedErrorBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: errorColor, width: 1.5),
       ),
+      labelStyle: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 2.0, color: mutedText),
+      hintStyle: GoogleFonts.poppins(fontSize: 14, color: mutedText),
     ),
-    dividerTheme: const DividerThemeData(
-      color: dividerColor, // From second file
-      thickness: 1,
-      space: 1,
-    ),
+    dividerTheme: const DividerThemeData(color: border, thickness: 1, space: 1),
   );
 
-  static ThemeData darkTheme = ThemeData(
-    brightness: Brightness.dark,
+  static ThemeData get darkTheme => ThemeData(
     useMaterial3: true,
-    fontFamily: 'Poppins', // Default font for the app is Poppins
-    textTheme: TextTheme(
-      displayLarge: TextStyle(fontFamily: 'Poppins'),
-      headlineMedium: TextStyle(fontFamily: 'Poppins'),
-      titleLarge: TextStyle(fontFamily: 'Poppins'),
-      titleMedium: TextStyle(fontFamily: 'Poppins'),
-      bodyLarge: TextStyle(fontFamily: 'Poppins'),
-      bodyMedium: TextStyle(fontFamily: 'Poppins'),
-      labelLarge: TextStyle(fontFamily: 'Poppins'),
-    ),
-    colorScheme: ColorScheme(
+    textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+    scaffoldBackgroundColor: backgroundDark,
+    colorScheme: const ColorScheme(
       brightness: Brightness.dark,
-      primary: primaryColor, // From both files
-      onPrimary: Colors.black87,
-      secondary: secondaryDark, // From first file
-      onSecondary: Colors.black87,
-      error: errorDark, // From first file
+      primary: primary,
+      onPrimary: Colors.white,
+      secondary: Color(0xFFD4956B),
+      onSecondary: Colors.white,
+      error: Color(0xFFEF9A9A),
       onError: Colors.black,
-      surface: surfaceDark, // From first file
-      onSurface: textPrimaryDark, // Explicitly set for clarity
+      surface: surfaceDark,
+      onSurface: Color(0xFFE8D5C4),
     ),
-    scaffoldBackgroundColor: backgroundDark, // From first file
-    appBarTheme: const AppBarTheme(
-      backgroundColor: surfaceDark, // From first file
-      foregroundColor: primaryColor, // From both files
-      elevation: 0, // From first file
-      centerTitle: true,
-      titleTextStyle: TextStyle(
-        color: textPrimaryDark, // From first file
-        fontSize: 20,
-        fontWeight: FontWeight.bold,
-        fontFamily: 'Poppins', // Use Poppins
+    appBarTheme: AppBarTheme(
+      backgroundColor: backgroundDark,
+      foregroundColor: const Color(0xFFD4956B),
+      elevation: 0,
+      centerTitle: false,
+      titleTextStyle: GoogleFonts.cormorantGaramond(
+        fontSize: 20, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic,
+        color: const Color(0xFFD4956B),
       ),
     ),
-    cardTheme: CardTheme(
-      color: surfaceDark, // From first file
-      elevation: 6, // Adjusted from first file
+    cardTheme: CardThemeData(
+      color: surfaceDark,
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ), // From first file, adjusted to match cardDecoration radius
-      shadowColor: Colors.black26, // From first file
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: primaryButtonStyle, // Reference the static style defined above
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: secondaryButtonStyle, // Reference the static style defined above
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: borderDark),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
-      border: UnderlineInputBorder(
-        borderSide: BorderSide(color: inputBorderColor), // Renamed for clarity
-      ),
-      enabledBorder: UnderlineInputBorder(
-        borderSide: BorderSide(color: inputBorderColor), // Renamed for clarity
-      ),
-      focusedBorder: UnderlineInputBorder(
-        borderSide: BorderSide(
-          color: focusedBorderColor,
-        ), // Renamed for clarity
-      ),
-      hintStyle: TextStyle(
-        color: textSecondaryDark.withOpacity(0.6),
-        fontSize: 14,
-        fontFamily: 'Poppins', // Use Poppins
-      ),
+      filled: false,
+      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: borderDark, width: 1.5)),
+      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: primary, width: 1.5)),
+      hintStyle: GoogleFonts.poppins(fontSize: 14, color: mutedTextDark),
     ),
-    dividerTheme: const DividerThemeData(
-      color: dividerColor, // From second file
-      thickness: 1,
-      space: 1,
-    ),
+    dividerTheme: const DividerThemeData(color: borderDark, thickness: 1, space: 1),
   );
 }

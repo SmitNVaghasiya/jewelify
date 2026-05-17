@@ -10,7 +10,6 @@ class ImageStorage {
       await image.copy(filePath);
       return filePath;
     } catch (e) {
-      print('Error saving image: $e');
       return null;
     }
   }

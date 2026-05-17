@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 import cv2
 import numpy as np
 from typing import Optional
@@ -6,260 +6,175 @@ from datetime import datetime
 import logging
 import os
 from dotenv import load_dotenv
-from api.dependencies import get_current_user
-from services.predictor import JewelryPredictor
+from api.dependencies import get_current_user, validate_object_id
 from services.database import get_db_client
 import asyncio
 from bson import ObjectId
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Configure logging based on environment
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 logging_level = logging.DEBUG if ENVIRONMENT == "development" else logging.WARNING
 logging.basicConfig(level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Reduce pymongo logging to WARNING to avoid excessive debug logs
 logging.getLogger("pymongo").setLevel(logging.WARNING)
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
 
-# Configurable polling settings
 POLLING_TIMEOUT_SECONDS = int(os.getenv("POLLING_TIMEOUT_SECONDS", 60))
 POLLING_INTERVAL_SECONDS = int(os.getenv("POLLING_INTERVAL_SECONDS", 5))
+
 
 def save_prediction_to_db(prediction_data: dict, user_id: str) -> str:
     client = get_db_client()
     if not client:
-        logger.error("Database connection not available")
         raise HTTPException(status_code=500, detail="Database connection unavailable")
-    
-    logger.info(f"Saving prediction to database for user {user_id}...")
-    start_time = datetime.now()
     try:
         prediction_data["user_id"] = ObjectId(user_id)
-        prediction_data["timestamp"] = datetime.now().isoformat()
+        prediction_data["timestamp"] = datetime.utcnow().isoformat()
         prediction_data["validation_status"] = "pending"
         prediction_data["prediction_status"] = "pending"
-        db = client["jewelify"]
-        predictions_collection = db["predictions"]
-        result = predictions_collection.insert_one(prediction_data)
-        logger.info(f"Prediction saved to database in {(datetime.now() - start_time).total_seconds():.2f} seconds")
+        result = client["jewelify"]["predictions"].insert_one(prediction_data)
         return str(result.inserted_id)
     except Exception as e:
-        logger.error(f"Failed to save prediction to database: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        logger.error(f"Failed to save prediction: {e}")
+        raise HTTPException(status_code=500, detail="Database error saving prediction")
+
 
 @router.post("/predict")
 async def predict(
+    request: Request,
     face: UploadFile = File(...),
     jewelry: UploadFile = File(...),
     face_image_path: str = Form(...),
     jewelry_image_path: str = Form(...),
     user: dict = Depends(get_current_user),
 ):
-    logger.info("Received POST request to /predictions/predict")
-    logger.info(f"User: {user}")
-    logger.info(f"Face image path: {face_image_path}, Jewelry image path: {jewelry_image_path}")
+    logger.info(f"POST /predictions/predict user={user.get('_id')}")
 
-    # Initialize predictor per request to ensure thread-safety
-    try:
-        predictor = JewelryPredictor()
-        logger.info("JewelryPredictor initialized successfully for this request")
-    except Exception as e:
-        logger.error(f"Failed to initialize JewelryPredictor: {str(e)}")
-        raise HTTPException(status_code=500, detail="Predictor initialization failed")
+    # C-001: use cached predictor from app.state
+    predictor = request.app.state.predictor
+    if predictor is None:
+        raise HTTPException(status_code=503, detail="Predictor not available")
 
-    start_time = datetime.now()
     try:
-        # Check if '_id' exists in the user dictionary
         if "_id" not in user:
-            logger.error("User dictionary missing '_id' field")
             raise HTTPException(status_code=401, detail="Invalid token: User ID not found")
 
-        # Read and decode images
-        logger.info("Reading and decoding images...")
-        face_contents = await face.read()
-        jewelry_contents = await jewelry.read()
+        # Read and decode images (async)
+        face_contents, jewelry_contents = await asyncio.gather(face.read(), jewelry.read())
 
-        # Reset file cursors in case the files need to be read again
-        await face.seek(0)
-        await jewelry.seek(0)
-
-        face_image = cv2.imdecode(np.frombuffer(face_contents, np.uint8), cv2.IMREAD_COLOR)
+        face_image = await asyncio.to_thread(
+            cv2.imdecode, np.frombuffer(face_contents, np.uint8), cv2.IMREAD_COLOR
+        )
         if face_image is None:
-            logger.warning("Failed to decode face image")
             raise HTTPException(status_code=400, detail="Invalid face image format")
-        logger.debug("Face image decoded successfully")
 
-        jewelry_image = cv2.imdecode(np.frombuffer(jewelry_contents, np.uint8), cv2.IMREAD_COLOR)
+        jewelry_image = await asyncio.to_thread(
+            cv2.imdecode, np.frombuffer(jewelry_contents, np.uint8), cv2.IMREAD_COLOR
+        )
         if jewelry_image is None:
-            logger.warning("Failed to decode jewelry image")
             raise HTTPException(status_code=400, detail="Invalid jewelry image format")
-        logger.debug("Jewelry image decoded successfully")
 
-        logger.debug(f"Face image decoded: {face_image.shape}, Jewelry image decoded: {jewelry_image.shape}")
-
-        # Initialize prediction data with default values
         prediction_data = {
-            "prediction1": {
-                "score": 0.0,
-                "category": "Not Assigned",
-                "recommendations": [],
-                "feedback_required": True,
-                "overall_feedback": 0.5
-            },
-            "prediction2": {
-                "score": 0.0,
-                "category": "Not Assigned",
-                "recommendations": [],
-                "feedback_required": True,
-                "overall_feedback": 0.5
-            },
+            "prediction1": {"score": 0.0, "category": "Not Assigned", "recommendations": [], "feedback_required": True, "overall_feedback": 0.5},
+            "prediction2": {"score": 0.0, "category": "Not Assigned", "recommendations": [], "feedback_required": True, "overall_feedback": 0.5},
             "face_image_path": face_image_path,
             "jewelry_image_path": jewelry_image_path,
         }
 
-        # Save initial prediction data to database
         prediction_id = save_prediction_to_db(prediction_data, str(user["_id"]))
-        if not prediction_id:
-            logger.error("Failed to save prediction to database")
-            raise HTTPException(status_code=500, detail="Failed to save prediction")
-        logger.info(f"Prediction ID {prediction_id} saved")
 
-        # Run validation and prediction tasks concurrently
-        logger.info(f"Prediction {prediction_id}: Validation started")
         validation_task = asyncio.create_task(
             predictor.validate_images(face_image, jewelry_image, prediction_id)
         )
-        logger.info(f"Prediction {prediction_id}: Prediction started")
         prediction_task = asyncio.create_task(
             predictor.predict_both(face_image, jewelry_image, face_image_path, jewelry_image_path, prediction_id)
         )
-        logger.info("Waiting for tasks to complete...")
         results = await asyncio.gather(validation_task, prediction_task, return_exceptions=True)
 
-        # Check for exceptions in the tasks
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(f"Task {i} (validation or prediction) failed with exception: {str(result)}")
-                raise HTTPException(status_code=500, detail=f"Task failed: {str(result)}")
+                logger.error(f"Task {i} failed: {result}")
+                raise HTTPException(status_code=500, detail="Processing failed")
 
-        # Check validation result
-        validation_success = results[0]
-        if not validation_success:
-            logger.warning(f"Prediction {prediction_id} failed validation")
+        if not results[0]:
             raise HTTPException(status_code=400, detail="Validation failed: Ensure a face is visible and jewelry is clear.")
 
-        logger.info(f"Prediction {prediction_id}: Both successfully completed")
+        return {"status": "success", "prediction_id": prediction_id, "message": "Prediction completed successfully"}
 
-        logger.info(f"Prediction request completed in {(datetime.now() - start_time).total_seconds():.2f} seconds")
-        return {
-            "status": "success",
-            "prediction_id": prediction_id,
-            "message": "Prediction and validation tasks initiated successfully"
-        }
-
-    except HTTPException as e:
-        logger.error(f"HTTP error during prediction: {str(e)}")
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error during prediction: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing prediction: {str(e)}")
+        logger.error(f"Unexpected error during prediction: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred processing your request")
+
 
 @router.get("/get_prediction/{prediction_id}")
 async def get_prediction(prediction_id: str, user: dict = Depends(get_current_user)):
     client = get_db_client()
     if not client:
-        logger.error("Database connection not available")
         raise HTTPException(status_code=500, detail="Database connection unavailable")
 
-    logger.info(f"Fetching prediction {prediction_id} for user {user['_id']}...")
-    start_time = datetime.now()
-    try:
-        # Check if '_id' exists in the user dictionary
-        if "_id" not in user:
-            logger.error("User dictionary missing '_id' field")
-            raise HTTPException(status_code=401, detail="Invalid token: User ID not found")
+    user_oid = validate_object_id(str(user["_id"]))
+    pred_oid = validate_object_id(prediction_id)
 
-        # Check if prediction exists
+    try:
         db = client["jewelify"]
-        predictions_collection = db["predictions"]
-        prediction = predictions_collection.find_one({
-            "_id": ObjectId(prediction_id),
-            "user_id": ObjectId(user["_id"])
-        })
+        col = db["predictions"]
+        prediction = col.find_one({"_id": pred_oid, "user_id": user_oid})
         if not prediction:
-            logger.warning(f"Prediction {prediction_id} not found")
             raise HTTPException(status_code=404, detail="Prediction not found")
 
-        # Check the status of validation and prediction tasks
-        validation_status = prediction.get("validation_status", "pending")
-        prediction_status = prediction.get("prediction_status", "pending")
+        start_wait = datetime.utcnow()
+        while True:
+            v_status = prediction.get("validation_status", "pending")
+            p_status = prediction.get("prediction_status", "pending")
+            if v_status != "pending" and p_status != "pending":
+                break
+            if (datetime.utcnow() - start_wait).total_seconds() >= POLLING_TIMEOUT_SECONDS:
+                raise HTTPException(status_code=408, detail="Request timed out waiting for prediction to complete")
+            await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+            prediction = col.find_one({"_id": pred_oid, "user_id": user_oid})
 
-        # Wait for both tasks to complete (with a configurable timeout)
-        start_wait = datetime.now()
-        while (validation_status == "pending" or prediction_status == "pending") and (datetime.now() - start_wait).total_seconds() < POLLING_TIMEOUT_SECONDS:
-            await asyncio.sleep(POLLING_INTERVAL_SECONDS)  # Check every POLLING_INTERVAL_SECONDS
-            prediction = predictions_collection.find_one({
-                "_id": ObjectId(prediction_id),
-                "user_id": ObjectId(user["_id"])
-            })
-            validation_status = prediction.get("validation_status", "pending")
-            prediction_status = prediction.get("prediction_status", "pending")
+        if prediction.get("validation_status") == "failed":
+            raise HTTPException(status_code=400, detail="Validation failed")
+        if prediction.get("prediction_status") == "failed":
+            raise HTTPException(status_code=500, detail="Prediction failed")
 
-        # Check if tasks timed out
-        if validation_status == "pending" or prediction_status == "pending":
-            logger.warning(f"Prediction {prediction_id} timed out waiting for tasks to complete after {POLLING_TIMEOUT_SECONDS} seconds")
-            raise HTTPException(status_code=408, detail=f"Request timed out waiting for validation and prediction to complete after {POLLING_TIMEOUT_SECONDS} seconds")
+        p1 = prediction.get("prediction1", {})
+        p2 = prediction.get("prediction2", {})
 
-        # Check if either task failed
-        if validation_status == "failed":
-            logger.warning(f"Prediction {prediction_id} failed validation")
-            raise HTTPException(status_code=400, detail="Failed validation")
-        if prediction_status == "failed":
-            logger.warning(f"Prediction {prediction_id} failed prediction")
-            raise HTTPException(status_code=500, detail="Failed prediction")
-
-        # Both tasks completed successfully, prepare the prediction response
-        # Ensure feedback scores default to 0.5 if not provided or invalid
-        prediction["prediction1"] = prediction.get("prediction1", {})
-        prediction["prediction2"] = prediction.get("prediction2", {})
-
-        overall_feedback1 = prediction["prediction1"].get("overall_feedback")
-        overall_feedback2 = prediction["prediction2"].get("overall_feedback")
-
-        prediction["prediction1"]["overall_feedback"] = (
-            float(overall_feedback1) if overall_feedback1 is not None else 0.5
-        )
-        prediction["prediction2"]["overall_feedback"] = (
-            float(overall_feedback2) if overall_feedback2 is not None else 0.5
-        )
-
-        # Convert ObjectId fields to strings for JSON serialization
-        result = {
+        return {
             "prediction_id": str(prediction["_id"]),
             "user_id": str(prediction["user_id"]),
-            "prediction1": prediction["prediction1"],
-            "prediction2": prediction["prediction2"],
+            "prediction1": {
+                "score": p1.get("score", 0.0),
+                "category": p1.get("category", "Not Assigned"),
+                "recommendations": p1.get("recommendations", []),
+                "overall_feedback": float(p1.get("overall_feedback") or 0.5),
+                "feedback_required": p1.get("feedback_required", True),
+            },
+            "prediction2": {
+                "score": p2.get("score", 0.0),
+                "category": p2.get("category", "Not Assigned"),
+                "recommendations": p2.get("recommendations", []),
+                "overall_feedback": float(p2.get("overall_feedback") or 0.5),
+                "feedback_required": p2.get("feedback_required", True),
+            },
             "face_image_path": prediction.get("face_image_path"),
             "jewelry_image_path": prediction.get("jewelry_image_path"),
             "timestamp": prediction.get("timestamp"),
             "validation_status": prediction.get("validation_status"),
-            "prediction_status": prediction.get("prediction_status")
+            "prediction_status": prediction.get("prediction_status"),
         }
 
-        logger.info(f"Prediction {prediction_id}: Get prediction successfully returned in {(datetime.now() - start_time).total_seconds():.2f} seconds")
-        return result
-    except HTTPException as e:
-        logger.error(f"HTTP error during prediction fetch: {str(e)}")
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error fetching prediction {prediction_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error fetching prediction: {str(e)}")
+        logger.error(f"Error fetching prediction {prediction_id}: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred fetching your prediction")
+
 
 @router.post("/feedback/{feedback_type}")
 async def submit_feedback(
@@ -272,48 +187,29 @@ async def submit_feedback(
 ):
     client = get_db_client()
     if not client:
-        logger.error("Database connection not available")
         raise HTTPException(status_code=500, detail="Database connection unavailable")
 
-    logger.info(f"Submitting feedback for prediction {prediction_id} for user {user['_id']}...")
-    start_time = datetime.now()
+    if feedback_type not in ["prediction", "recommendation"]:
+        raise HTTPException(status_code=400, detail="Invalid feedback type")
+    if model_type not in ["prediction1", "prediction2"]:
+        raise HTTPException(status_code=400, detail="Invalid model type")
+
     try:
-        # Check if '_id' exists in the user dictionary
-        if "_id" not in user:
-            logger.error("User dictionary missing '_id' field")
-            raise HTTPException(status_code=401, detail="Invalid token: User ID not found")
+        score_float = float(score)
+        if not 0 <= score_float <= 1:
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Score must be a float between 0 and 1")
 
-        # Validate feedback type
-        if feedback_type not in ["prediction", "recommendation"]:
-            logger.warning(f"Invalid feedback type: {feedback_type}")
-            raise HTTPException(status_code=400, detail="Invalid feedback type")
+    user_oid = validate_object_id(str(user["_id"]))
+    pred_oid = validate_object_id(prediction_id)
 
-        # Validate model type
-        if model_type not in ["prediction1", "prediction2"]:
-            logger.warning(f"Invalid model type: {model_type}")
-            raise HTTPException(status_code=400, detail="Invalid model type")
-
-        # Validate score
-        try:
-            score_float = float(score)
-            if not 0 <= score_float <= 1:
-                raise ValueError("Score must be between 0 and 1")
-        except ValueError as e:
-            logger.warning(f"Invalid score value: {score}")
-            raise HTTPException(status_code=400, detail=f"Invalid score: {str(e)}")
-
-        # Check if prediction exists
+    try:
         db = client["jewelify"]
-        predictions_collection = db["predictions"]
-        prediction = predictions_collection.find_one({
-            "_id": ObjectId(prediction_id),
-            "user_id": ObjectId(user["_id"])
-        })
+        prediction = db["predictions"].find_one({"_id": pred_oid, "user_id": user_oid})
         if not prediction:
-            logger.warning(f"Prediction {prediction_id} not found for feedback")
             raise HTTPException(status_code=404, detail="Prediction not found")
 
-        # Save feedback to the reviews collection
         from services.database import save_review
         success = save_review(
             user_id=str(user["_id"]),
@@ -321,24 +217,21 @@ async def submit_feedback(
             model_type=model_type,
             recommendation_name=recommendation_name,
             score=score_float,
-            feedback_type=feedback_type
+            feedback_type=feedback_type,
         )
         if not success:
-            logger.error("Failed to save feedback to database")
             raise HTTPException(status_code=500, detail="Failed to save feedback")
 
-        # Update feedback_required field if feedback_type is "prediction"
         if feedback_type == "prediction":
-            predictions_collection.update_one(
-                {"_id": ObjectId(prediction_id)},
-                {"$set": {f"{model_type}.feedback_required": False}}
+            db["predictions"].update_one(
+                {"_id": pred_oid},
+                {"$set": {f"{model_type}.feedback_required": False}},
             )
 
-        logger.info(f"Feedback for prediction {prediction_id} submitted in {(datetime.now() - start_time).total_seconds():.2f} seconds")
         return {"message": "Feedback submitted successfully"}
-    except HTTPException as e:
-        logger.error(f"HTTP error during feedback submission: {str(e)}")
-        raise e
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error submitting feedback: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error submitting feedback: {str(e)}")
+        logger.error(f"Error submitting feedback: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred submitting feedback")

@@ -1,140 +1,164 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../screens/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  String _username = '';
-  String _password = '';
-  bool _obscurePassword = true;
-  bool _isLoading = false;
+  final _emailCtrl = TextEditingController();
+  final _passCtrl  = TextEditingController();
+  bool _obscure    = true;
+  bool _loading    = false;
 
-  Future<void> _login() async {
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    _formKey.currentState!.save();
-    setState(() => _isLoading = true);
-
+    setState(() => _loading = true);
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.login(_username, _password);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Login successful!')));
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      await context.read<AuthProvider>().login(
+        _emailCtrl.text.trim(),
+        _passCtrl.text,
+      );
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
+      backgroundColor: AppTheme.background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 80),
+                const SizedBox(height: 56),
                 Center(
-                  child: Image.asset(
-                    'assets/images/login_illustration.png',
-                    height: 180,
+                  child: Column(
+                    children: [
+                      Text('Jewelify', style: AppTheme.displayLarge),
+                      const SizedBox(height: 4),
+                      Text(
+                        'adorned beautifully',
+                        style: AppTheme.labelUppercase.copyWith(letterSpacing: 3),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(width: 40, height: 1.5, color: AppTheme.primary),
+                    ],
                   ),
+                ),
+                const SizedBox(height: 48),
+                Text('Sign in to continue', style: AppTheme.titleStyle),
+                const SizedBox(height: 28),
+                TextFormField(
+                  controller: _emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'EMAIL ADDRESS'),
+                  style: AppTheme.bodyMedium,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Enter your email';
+                    if (!v.contains('@')) return 'Enter a valid email';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'Log-in',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 30),
                 TextFormField(
-                  decoration: const InputDecoration(
-                    hintText: 'Username or Mobile No.',
-                    hintStyle: TextStyle(color: Color(0xFF757575)),
-                  ),
-                  style: const TextStyle(color: Color(0xFF757575)),
-                  validator:
-                      (value) =>
-                          value!.isEmpty
-                              ? 'Please enter your username or mobile number'
-                              : null,
-                  onSaved: (value) => _username = value ?? '',
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
+                  controller: _passCtrl,
+                  obscureText: _obscure,
                   decoration: InputDecoration(
-                    hintText: 'Password',
-                    hintStyle: const TextStyle(color: Color(0xFF757575)),
+                    labelText: 'PASSWORD',
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: Colors.grey,
+                        _obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: AppTheme.mutedText,
+                        size: 20,
                       ),
-                      onPressed:
-                          () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
+                      onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
-                  obscureText: _obscurePassword,
-                  style: const TextStyle(color: Color(0xFF757575)),
-                  validator:
-                      (value) =>
-                          value!.isEmpty ? 'Please enter your password' : null,
-                  onSaved: (value) => _password = value ?? '',
+                  style: AppTheme.bodyMedium,
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? 'Enter your password' : null,
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/forgot-password'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.primary,
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: Text(
+                      'Forgot password?',
+                      style: AppTheme.bodySmall.copyWith(color: AppTheme.primary),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
-                  height: 55,
-                  child:
-                      _isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : ElevatedButton(
-                            onPressed: _login,
-                            child: const Text('Login'),
-                          ),
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _submit,
+                    style: AppTheme.primaryButton,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('SIGN IN'),
+                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      "Don't have an account? ",
-                      style: TextStyle(color: Color(0xFF757575)),
+                    const Expanded(child: Divider(color: AppTheme.border)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('or', style: AppTheme.bodySmall),
                     ),
-                    GestureDetector(
-                      onTap: () => Navigator.pushNamed(context, '/register'),
-                      child: const Text(
-                        'Sign-up',
-                        style: TextStyle(
-                          color: Color(0xFF2D4356),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    const Expanded(child: Divider(color: AppTheme.border)),
                   ],
                 ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pushNamed(context, '/register'),
+                    style: AppTheme.outlineButton,
+                    child: const Text('CREATE ACCOUNT'),
+                  ),
+                ),
+                const SizedBox(height: 32),
               ],
             ),
           ),

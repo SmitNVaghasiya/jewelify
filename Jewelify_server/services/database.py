@@ -1,4 +1,4 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING, DESCENDING
 import os
 from datetime import datetime
 from dotenv import load_dotenv
@@ -15,11 +15,17 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 client = None
 
+
 def get_db_client():
     global client
     if client is None:
         try:
-            client = MongoClient(MONGO_URI)
+            client = MongoClient(
+                MONGO_URI,
+                maxPoolSize=50,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+            )
             client.admin.command('ping')
             logger.info("Successfully connected to MongoDB Atlas!")
         except Exception as e:
@@ -29,19 +35,45 @@ def get_db_client():
         logger.debug("Reusing existing MongoDB client connection")
     return client
 
+
 def rebuild_client():
     global client, MONGO_URI
     if not MONGO_URI:
         logger.error("Cannot rebuild client: MONGO_URI not found")
         return False
     try:
-        client = MongoClient(MONGO_URI)
+        client = MongoClient(
+            MONGO_URI,
+            maxPoolSize=50,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+        )
         client.admin.command('ping')
         logger.info("Successfully rebuilt MongoDB client")
         return True
     except Exception as e:
         logger.error(f"Failed to rebuild MongoDB client: {e}")
         return False
+
+
+def ensure_indexes():
+    """Create all required MongoDB indexes for the Jewelify application."""
+    client = get_db_client()
+    if not client:
+        logger.warning("ensure_indexes: No MongoDB client available, skipping index creation")
+        return
+    try:
+        db = client["jewelify"]
+        db["users"].create_index("username", unique=True)
+        db["users"].create_index("email", unique=True)
+        db["otps"].create_index("email")
+        db["otps"].create_index("expires_at", expireAfterSeconds=0)
+        db["predictions"].create_index([("user_id", ASCENDING), ("timestamp", DESCENDING)])
+        db["reviews"].create_index([("prediction_id", ASCENDING), ("user_id", ASCENDING)])
+        logger.info("MongoDB indexes ensured successfully")
+    except Exception as e:
+        logger.error(f"Error ensuring MongoDB indexes: {e}")
+
 
 def save_prediction(prediction_data: dict, user_id: str):
     client = get_db_client()
@@ -71,6 +103,7 @@ def save_prediction(prediction_data: dict, user_id: str):
     except Exception as e:
         logger.error(f"Error saving prediction to MongoDB: {e}")
         return None
+
 
 def get_prediction_by_id(prediction_id, user_id):
     client = get_db_client()
@@ -175,6 +208,7 @@ def get_prediction_by_id(prediction_id, user_id):
     except Exception as e:
         logger.error(f"Error retrieving prediction from MongoDB: {e}")
         return {"error": f"Database error: {str(e)}"}
+
 
 def save_review(user_id, prediction_id, model_type, recommendation_name, score, feedback_type):
     client = get_db_client()

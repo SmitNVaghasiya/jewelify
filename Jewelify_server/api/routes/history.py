@@ -1,27 +1,39 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from api.dependencies import get_current_user
+from api.dependencies import get_current_user, validate_object_id
 from services.database import get_db_client
 from bson import ObjectId
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/history", tags=["history"])
+
 
 @router.get("/")
 async def get_user_history(
     current_user: dict = Depends(get_current_user),
     limit: int = Query(10, ge=1, le=100),
-    skip: int = Query(0, ge=0)
+    skip: int = Query(0, ge=0),
 ):
     client = get_db_client()
     if not client:
-        return {"error": "Database connection error"}
+        raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+    user_oid = validate_object_id(str(current_user["_id"]))
 
     try:
         db = client["jewelify"]
-        predictions_collection = db["predictions"]  # Updated to match the correct collection
-        reviews_collection = db["reviews"]
-        predictions = list(predictions_collection.find({"user_id": ObjectId(current_user["_id"])}).sort("timestamp", -1).skip(skip).limit(limit))
+        predictions_col = db["predictions"]
+        reviews_col = db["reviews"]
+        predictions = list(
+            predictions_col.find({"user_id": user_oid})
+            .sort("timestamp", -1)
+            .skip(skip)
+            .limit(limit)
+        )
     except Exception as e:
-        return {"error": "Database error: " + str(e)}
+        logger.error(f"Database error fetching history: {e}")
+        raise HTTPException(status_code=500, detail="Database error fetching history")
 
     if not predictions:
         return {"message": "No predictions found", "history": []}
@@ -29,97 +41,76 @@ async def get_user_history(
     results = []
     for pred in predictions:
         prediction_id = str(pred["_id"])
-        user_id = str(current_user["_id"])
+        user_id_str = str(current_user["_id"])
+        pred_oid = ObjectId(prediction_id)
+        user_oid2 = ObjectId(user_id_str)
 
-        # Fetch individual recommendation feedback
-        recommendation_reviews = list(reviews_collection.find({
-            "prediction_id": ObjectId(prediction_id),
-            "user_id": ObjectId(user_id),
-            "feedback_type": "recommendation"
-        }))
-        individual_feedback = {"prediction1": {}, "prediction2": {}}
-        for review in recommendation_reviews:
-            model_type = review["model_type"]
-            if model_type in individual_feedback:
-                individual_feedback[model_type][review["recommendation_name"]] = review["score"]
+        try:
+            rec_reviews = list(reviews_col.find({
+                "prediction_id": pred_oid,
+                "user_id": user_oid2,
+                "feedback_type": "recommendation",
+            }))
+            individual_feedback = {"prediction1": {}, "prediction2": {}}
+            for review in rec_reviews:
+                mt = review["model_type"]
+                if mt in individual_feedback:
+                    individual_feedback[mt][review["recommendation_name"]] = review["score"]
 
-        # Fetch overall prediction feedback
-        prediction_reviews = list(reviews_collection.find({
-            "prediction_id": ObjectId(prediction_id),
-            "user_id": ObjectId(user_id),
-            "feedback_type": "prediction"
-        }))
-        overall_feedback = {"prediction1": None, "prediction2": None}
-        for review in prediction_reviews:
-            model_type = review["model_type"]
-            if model_type in overall_feedback:
-                overall_feedback[model_type] = review["score"]
+            pred_reviews = list(reviews_col.find({
+                "prediction_id": pred_oid,
+                "user_id": user_oid2,
+                "feedback_type": "prediction",
+            }))
+            overall_feedback = {"prediction1": None, "prediction2": None}
+            for review in pred_reviews:
+                mt = review["model_type"]
+                if mt in overall_feedback:
+                    overall_feedback[mt] = review["score"]
 
-        # Default to 0.5 if no feedback
-        overall_feedback["prediction1"] = float(overall_feedback["prediction1"]) if overall_feedback["prediction1"] is not None else 0.5
-        overall_feedback["prediction2"] = float(overall_feedback["prediction2"]) if overall_feedback["prediction2"] is not None else 0.5
+            overall_feedback["prediction1"] = float(overall_feedback["prediction1"]) if overall_feedback["prediction1"] is not None else 0.5
+            overall_feedback["prediction2"] = float(overall_feedback["prediction2"]) if overall_feedback["prediction2"] is not None else 0.5
 
-        # Process recommendations for each model
-        xgboost_recs = pred.get("prediction1", {}).get("recommendations", [])
-        mlp_recs = pred.get("prediction2", {}).get("recommendations", [])
+            def apply_feedback(recs, model_key):
+                for rec in recs:
+                    name = rec["name"]
+                    if name in individual_feedback[model_key]:
+                        rec["user_score"] = individual_feedback[model_key][name]
+                        rec["liked"] = rec["user_score"] >= 0.75
+                    elif overall_feedback[model_key] is not None:
+                        rec["user_score"] = overall_feedback[model_key]
+                        rec["liked"] = rec["user_score"] >= 0.75
+                    else:
+                        rec["user_score"] = None
+                        rec["liked"] = rec.get("score", 0.0) >= 75.0
+                return sorted(recs, key=lambda x: (x["liked"], x.get("score", 0.0)), reverse=True)[:10]
 
-        # Apply feedback scores to recommendations
-        for rec in xgboost_recs:
-            rec_name = rec["name"]
-            # Default liked status based on model prediction score
-            rec["liked"] = rec.get("score", 0.0) >= 75.0
-            # Apply user score: individual feedback takes precedence, else use overall feedback
-            if rec_name in individual_feedback["prediction1"]:
-                rec["user_score"] = individual_feedback["prediction1"][rec_name]
-                rec["liked"] = rec["user_score"] >= 0.75
-            elif overall_feedback["prediction1"] is not None:
-                rec["user_score"] = overall_feedback["prediction1"]
-                rec["liked"] = rec["user_score"] >= 0.75
-            else:
-                rec["user_score"] = None  # Will trigger feedback requirement
+            xgb_recs = apply_feedback(pred.get("prediction1", {}).get("recommendations", []), "prediction1")
+            mlp_recs = apply_feedback(pred.get("prediction2", {}).get("recommendations", []), "prediction2")
 
-        for rec in mlp_recs:
-            rec_name = rec["name"]
-            # Default liked status based on model prediction score
-            rec["liked"] = rec.get("score", 0.0) >= 75.0
-            # Apply user score: individual feedback takes precedence, else use overall feedback
-            if rec_name in individual_feedback["prediction2"]:
-                rec["user_score"] = individual_feedback["prediction2"][rec_name]
-                rec["liked"] = rec["user_score"] >= 0.75
-            elif overall_feedback["prediction2"] is not None:
-                rec["user_score"] = overall_feedback["prediction2"]
-                rec["liked"] = rec["user_score"] >= 0.75
-            else:
-                rec["user_score"] = None  # Will trigger feedback requirement
-
-        # Sort: liked first, then by score
-        xgboost_sorted = sorted(xgboost_recs, key=lambda x: (x["liked"], x.get("score", 0.0)), reverse=True)
-        mlp_sorted = sorted(mlp_recs, key=lambda x: (x["liked"], x.get("score", 0.0)), reverse=True)
-
-        # Enforce exactly 10 recommendations per model
-        xgboost_display = xgboost_sorted[:10]
-        mlp_display = mlp_sorted[:10]
-
-        results.append({
-            "id": prediction_id,
-            "user_id": str(pred["user_id"]),
-            "prediction1": {
-                "score": pred.get("prediction1", {}).get("score", 0.0),
-                "category": pred.get("prediction1", {}).get("category", "Not Assigned"),
-                "recommendations": xgboost_display,
-                "overall_feedback": overall_feedback["prediction1"],
-                "feedback_required": "Overall feedback for prediction1 is required" if overall_feedback["prediction1"] == 0.5 else None
-            },
-            "prediction2": {
-                "score": pred.get("prediction2", {}).get("score", 0.0),
-                "category": pred.get("prediction2", {}).get("category", "Not Assigned"),
-                "recommendations": mlp_display,
-                "overall_feedback": overall_feedback["prediction2"],
-                "feedback_required": "Overall feedback for prediction2 is required" if overall_feedback["prediction2"] == 0.5 else None
-            },
-            "face_image_path": pred.get("face_image_path"),
-            "jewelry_image_path": pred.get("jewelry_image_path"),
-            "timestamp": pred["timestamp"]
-        })
+            results.append({
+                "id": prediction_id,
+                "user_id": user_id_str,
+                "prediction1": {
+                    "score": pred.get("prediction1", {}).get("score", 0.0),
+                    "category": pred.get("prediction1", {}).get("category", "Not Assigned"),
+                    "recommendations": xgb_recs,
+                    "overall_feedback": overall_feedback["prediction1"],
+                    "feedback_required": overall_feedback["prediction1"] == 0.5,
+                },
+                "prediction2": {
+                    "score": pred.get("prediction2", {}).get("score", 0.0),
+                    "category": pred.get("prediction2", {}).get("category", "Not Assigned"),
+                    "recommendations": mlp_recs,
+                    "overall_feedback": overall_feedback["prediction2"],
+                    "feedback_required": overall_feedback["prediction2"] == 0.5,
+                },
+                "face_image_path": pred.get("face_image_path"),
+                "jewelry_image_path": pred.get("jewelry_image_path"),
+                "timestamp": pred["timestamp"],
+            })
+        except Exception as e:
+            logger.error(f"Error processing prediction {prediction_id}: {e}")
+            continue
 
     return results

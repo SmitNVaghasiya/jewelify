@@ -10,15 +10,12 @@ logger = logging.getLogger(__name__)
 
 # Use the app's own health check endpoint to keep the server alive
 # Replace with your Render URL or use an environment variable
-KEEP_ALIVE_URL = "https://jewelify-server.onrender.com/health"
-# Interval for keep-alive pings (14 minutes = 840 seconds)
-KEEP_ALIVE_INTERVAL = 840
-# Number of retries for failed pings
-RETRY_ATTEMPTS = 3
-# Delay between retries
-RETRY_DELAY = 30  # 30 seconds
-# Timeout for HTTP requests
-REQUEST_TIMEOUT = 10  # 10 seconds
+import os
+KEEP_ALIVE_URL = os.getenv("RENDER_URL", "https://jewelify-server.onrender.com") + "/health"
+KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", 840))
+RETRY_ATTEMPTS = int(os.getenv("KEEP_ALIVE_RETRIES", 3))
+RETRY_DELAY = 30
+REQUEST_TIMEOUT = 10
 
 async def keep_alive_task(app: FastAPI):
     """Background task to ping a URL periodically to keep the Render instance alive."""
