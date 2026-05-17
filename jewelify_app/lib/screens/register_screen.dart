@@ -97,12 +97,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
     setState(() => _loading = true);
     try {
-      await context.read<AuthProvider>().register(
+      final auth = context.read<AuthProvider>();
+      await auth.verifyOtp(
+        email: _emailCtrl.text.trim(),
+        otp:   _otpCtrl.text.trim(),
+      );
+      await auth.register(
         name:     _nameCtrl.text.trim(),
         username: _usernameCtrl.text.trim(),
         email:    _emailCtrl.text.trim(),
         password: _passCtrl.text,
-        otp:      _otpCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
@@ -119,7 +123,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
       appBar: AppBar(
         backgroundColor: AppTheme.background,
         elevation: 0,
@@ -204,7 +207,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             style: AppTheme.bodyMedium,
             validator: (v) {
               if (v == null || v.isEmpty) return 'Enter a password';
-              if (v.length < 6) return 'At least 6 characters';
+              if (v.length < 8) return 'At least 8 characters';
+              if (!v.contains(RegExp(r'[A-Z]'))) return 'Need one uppercase letter';
+              if (!v.contains(RegExp(r'\d'))) return 'Need one number';
+              if (!v.contains(RegExp(r'[!@#$%^&*()\-=\[\]{};|,.<>/?@]'))) {
+                return 'Need one special character';
+              }
               return null;
             },
           ),

@@ -294,7 +294,6 @@ class _UploadScreenState extends State<UploadScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) => _onPopInvoked(didPop),
       child: Scaffold(
-        backgroundColor: AppTheme.background,
         appBar: AppBar(
           backgroundColor: AppTheme.background,
           foregroundColor: AppTheme.appNameBrown,

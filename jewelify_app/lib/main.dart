@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
+import 'screens/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/forgot_password_screen.dart';
@@ -36,6 +38,15 @@ class _MyAppState extends State<MyApp> {
 
   void toggleTheme() {
     setState(() => isDarkMode = !isDarkMode);
+    SystemChrome.setSystemUIOverlayStyle(
+      isDarkMode ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
   }
 
   @override
@@ -44,12 +55,8 @@ class _MyAppState extends State<MyApp> {
       builder: (context, authProvider, child) {
         return MaterialApp(
           title: 'Jewelry Match',
-          theme: ThemeData.light().copyWith(
-            textTheme: ThemeData.light().textTheme.apply(fontFamily: 'Poppins'),
-          ),
-          darkTheme: ThemeData.dark().copyWith(
-            textTheme: ThemeData.dark().textTheme.apply(fontFamily: 'Poppins'),
-          ),
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
           themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
           initialRoute: authProvider.isAuthenticated ? '/home' : '/register',
           routes: {

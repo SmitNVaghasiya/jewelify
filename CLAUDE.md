@@ -113,6 +113,14 @@ Both: update `CLAUDE.md` Pending Work section.
 - Build for Play Store: use `flutter build appbundle` — AAB lets Play serve per-ABI, cuts install size to ~35–40MB
 - Direct APK distribution: use `flutter build apk --split-per-abi`
 
+## Local Dev Setup
+- Run backend: `uvicorn main:app --reload --port 5000 --host 0.0.0.0` (must use `--host 0.0.0.0` for phone on WiFi)
+- Set `ApiConstants.baseUrl = 'http://192.168.1.9:5000'` for local testing
+- **REVERT** to `https://jewelify-server.onrender.com` before any release build or git push
+- Windows Firewall rule required: `netsh advfirewall firewall add rule name="Uvicorn 5000" dir=in action=allow protocol=TCP localport=5000`
+- MongoDB Atlas free tier pauses after ~60 days idle — resume from Atlas dashboard if DNS errors appear
+
 ## Pending Work
-**Frontend**: ✅ `flutter analyze` clean (0 issues). All analyze fixes applied session 2026-05-17.  
-**Backend**: Session 003 (ML recommendations engine — wire actual category to recommendations, motor async driver, JWT refresh token)
+**Frontend**: ✅ `flutter analyze` clean (0 issues). E2E flow verified working (Session 004).  
+**Backend**: Session 003 (ML recommendations engine — wire actual category to recommendations, motor async driver, JWT refresh token)  
+**Before release**: Revert `ApiConstants.baseUrl` to Render URL. Run `flutter build apk --split-per-abi`.

@@ -109,12 +109,23 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> verifyOtp({required String email, required String otp}) async {
+    final res = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/auth/verify-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'otp': otp}),
+    );
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body);
+      throw Exception(body['detail'] ?? 'Invalid or expired OTP');
+    }
+  }
+
   Future<void> register({
     required String name,
     required String username,
     required String email,
     required String password,
-    required String otp,
   }) async {
     final res = await http.post(
       Uri.parse('${ApiConstants.baseUrl}/auth/register'),
@@ -124,7 +135,6 @@ class AuthProvider with ChangeNotifier {
         'username': username,
         'email': email,
         'password': password,
-        'otp': otp,
       }),
     );
     if (res.statusCode != 200 && res.statusCode != 201) {

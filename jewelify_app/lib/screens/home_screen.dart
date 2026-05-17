@@ -19,7 +19,6 @@ class HomeScreen extends StatelessWidget {
     final displayName = auth.name ?? auth.username ?? 'there';
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [

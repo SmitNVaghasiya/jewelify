@@ -132,3 +132,42 @@
 **Next**:
 - Backend Session 003: ML recommendations engine, motor async driver, JWT refresh
 - For smaller APK: use `flutter build appbundle` for Play Store (~35–40MB install size)
+
+---
+
+## Session 004 — 2026-05-17
+
+**Goal**: Fix local dev setup, connect phone to local backend, debug full registration + prediction flow end-to-end
+
+### Infrastructure Fixes ✅ COMPLETE
+
+| Task | What | Result |
+|------|------|--------|
+| I-01 | Deleted `C:\Users\smitv\.gradle` (25GB corrupted cache from disk-full) | Gradle re-downloaded clean |
+| I-02 | `ApiConstants.baseUrl` → `http://192.168.1.9:5000` for local testing | Phone hits local uvicorn |
+| I-03 | `.env` — added `RENDER_URL=http://127.0.0.1:5000` | keep-alive pings local, no more 503 |
+| I-04 | Uvicorn restarted with `--host 0.0.0.0` | Phone on same WiFi can reach backend |
+| I-05 | Windows Firewall — opened TCP port 5000 | `netsh advfirewall` rule added |
+| I-06 | MongoDB Atlas cluster resumed (was paused — free tier idle timeout) | Atlas connected successfully |
+| I-07 | Added SMTP vars to `.env` (`SMTP_USER`, `SMTP_PASSWORD`, etc.) | OTP email sending works |
+
+### Bug Fixes ✅ COMPLETE
+
+| Task | File | What |
+|------|------|--------|
+| B-01 | `register_screen.dart` — password validator | Min 6 chars → min 8 + uppercase + digit + special (match backend `UserRegister` Pydantic rules) |
+| B-02 | `auth_provider.dart` — `register()` | Removed `otp` field from register body (backend `UserRegister` has no `otp` field → was causing 422) |
+| B-03 | `auth_provider.dart` — added `verifyOtp()` | New method calls `POST /auth/verify-otp` before register |
+| B-04 | `register_screen.dart` — `_verify()` | Now calls `verifyOtp()` then `register()` in sequence |
+| B-05 | `widgets/score_display.dart:72` | `Row` overflow fixed — wrapped score `Text` in `Flexible` with `TextOverflow.ellipsis` |
+
+### Verified Working E2E ✅
+
+- OTP send → email received
+- OTP verify → 200 OK
+- Register → user created in MongoDB
+- Login → JWT returned
+- Image upload + prediction → completed in 1.92s (CPU, no GPU needed)
+- History fetch → 200 OK
+
+**Note**: Remember to revert `ApiConstants.baseUrl` → `https://jewelify-server.onrender.com` before building release APK or pushing to Render.

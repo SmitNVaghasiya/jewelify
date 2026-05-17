@@ -187,3 +187,31 @@
 - Kotlin KGP: `2.1.0` in `android/settings.gradle.kts` — Flutter dropping support for <2.1.0 soon
 
 **Rule**: When adding ML Kit or JNI-dependent packages, check required NDK version and bump to highest required.
+
+---
+
+## ADR-015: Local Dev Backend via --host 0.0.0.0
+**Date**: 2026-05-17  
+**Status**: Accepted
+
+**Context**: Uvicorn default binds to `127.0.0.1` (loopback only). Phone on same WiFi hits `192.168.1.9:5000` — different interface → connection refused.
+
+**Decision**: Run `uvicorn main:app --host 0.0.0.0 --port 5000` during local dev. `ApiConstants.baseUrl` set to `http://<local-ip>:5000` for local testing. Revert to Render URL before release build.
+
+**Rule**: Never commit `ApiConstants.baseUrl` pointing to local IP.
+
+---
+
+## ADR-016: Register Flow — Verify OTP Before Register
+**Date**: 2026-05-17  
+**Status**: Accepted
+
+**Context**: Flutter `register()` was sending `otp` field in body to `POST /auth/register`. Backend `UserRegister` Pydantic model has no `otp` field → 422 Unprocessable Entity. Also, OTP verification was being skipped entirely.
+
+**Decision**: Split into two sequential calls in `_verify()`:
+1. `POST /auth/verify-otp` — verify OTP first
+2. `POST /auth/register` — register without `otp` field
+
+Added `verifyOtp()` method to `AuthProvider`.
+
+**Password validation**: Frontend validator updated to match backend rules (8+ chars, uppercase, digit, special char) so invalid passwords are caught before OTP is sent.

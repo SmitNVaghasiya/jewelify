@@ -71,10 +71,13 @@ class ScoreDisplay extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              "Compatibility Score: ${score.toStringAsFixed(2)}%",
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+            Flexible(
+              child: Text(
+                "Compatibility Score: ${score.toStringAsFixed(2)}%",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),

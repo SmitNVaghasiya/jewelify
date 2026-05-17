@@ -151,8 +151,8 @@ class _ProcessingScreenState extends State<ProcessingScreen>
           ),
         ),
       );
-      request.fields['face_image_path'] = facePath.split('/').last;
-      request.fields['jewelry_image_path'] = jewelryPath.split('/').last;
+      request.fields['face_image_path'] = facePath;
+      request.fields['jewelry_image_path'] = jewelryPath;
 
       setState(() => _currentStatus = "Initiating prediction tasks...");
 
@@ -251,7 +251,6 @@ class _ProcessingScreenState extends State<ProcessingScreen>
         if (!didPop) _cancelProcessing();
       },
       child: Scaffold(
-        backgroundColor: AppTheme.background,
         appBar: AppBar(
           backgroundColor: AppTheme.background,
           foregroundColor: AppTheme.appNameBrown,

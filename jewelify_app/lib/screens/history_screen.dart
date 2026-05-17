@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -112,6 +113,117 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final int _limit = 10;
   int _skip = 0;
   bool _hasMore = true;
+  final Map<String, Future<File?>> _imageFutures = {};
+
+  Future<File?> _getImageFuture(String? path) {
+    if (path == null || path.isEmpty) return Future.value(null);
+    if (_imageFutures.containsKey(path)) return _imageFutures[path]!;
+    Future<File?> f;
+    if (path.startsWith('http')) {
+      f = Future.value(null);
+    } else {
+      f = (() async {
+        final file = File(path);
+        return await file.exists() ? file : null;
+      })();
+    }
+    _imageFutures[path] = f;
+    return f;
+  }
+
+  Widget _buildThumb(String? path) {
+    return FutureBuilder<File?>(
+      future: _getImageFuture(path),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFF5EDE4), Color(0xFFEDE0D4)],
+              ),
+              borderRadius: BorderRadius.circular(7),
+            ),
+          );
+        }
+        if (snap.hasData && snap.data != null) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: Image.file(
+              snap.data!,
+              width: 42,
+              height: 42,
+              fit: BoxFit.cover,
+            ),
+          );
+        }
+        return Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFF5EDE4), Color(0xFFEDE0D4)],
+            ),
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Icon(
+            Icons.image_outlined,
+            size: 18,
+            color: AppTheme.mutedText,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _scoreBar(String label, double score) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 18,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+              color: AppTheme.mutedText,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: score / 100,
+              minHeight: 3,
+              backgroundColor: AppTheme.border,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 28,
+          child: Text(
+            '${score.toStringAsFixed(0)}%',
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.primary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   void initState() {
@@ -270,7 +382,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
       appBar: AppBar(
         backgroundColor: AppTheme.background,
         foregroundColor: AppTheme.appNameBrown,
@@ -357,9 +468,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     decoration: AppTheme.cardDecoration,
                                     child: ExpandableItem(
                                       header: Padding(
-                                        padding: const EdgeInsets.all(16.0),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 12,
+                                        ),
                                         child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
                                           children: [
+                                            // Image thumbnails
+                                            Row(
+                                              children: [
+                                                _buildThumb(item.faceImagePath),
+                                                const SizedBox(width: 4),
+                                                _buildThumb(
+                                                  item.jewelryImagePath,
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(width: 10),
+                                            // Date + score bars
                                             Expanded(
                                               child: Column(
                                                 crossAxisAlignment:
@@ -367,70 +495,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                 children: [
                                                   Text(
                                                     item.date,
-                                                    style: AppTheme.bodyMedium.copyWith(
-                                                      fontWeight: FontWeight.bold,
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w600,
                                                       color: AppTheme.headingBrown,
                                                     ),
                                                   ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Validation: ${item.validationStatus}',
-                                                    style: AppTheme.bodySmall.copyWith(
-                                                      color:
-                                                          item.validationStatus ==
-                                                                  'failed'
-                                                              ? Colors.red
-                                                              : AppTheme.mutedText,
-                                                    ),
+                                                  const SizedBox(height: 6),
+                                                  _scoreBar(
+                                                    'M1',
+                                                    (item.prediction1['score']
+                                                            as num)
+                                                        .toDouble(),
                                                   ),
-                                                  Text(
-                                                    'Prediction: ${item.predictionStatus}',
-                                                    style: AppTheme.bodySmall.copyWith(
-                                                      color:
-                                                          item.predictionStatus ==
-                                                                  'failed'
-                                                              ? Colors.red
-                                                              : AppTheme.mutedText,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Model 1: ${item.prediction1['category']}',
-                                                    style: AppTheme.bodySmall.copyWith(
-                                                      color: AppTheme.mutedText,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Score: ${item.prediction1['score'].toStringAsFixed(1)}%',
-                                                    style: AppTheme.bodySmall.copyWith(
-                                                      color: AppTheme.primary,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Model 2: ${item.prediction2['category']}',
-                                                    style: AppTheme.bodySmall.copyWith(
-                                                      color: AppTheme.mutedText,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Score: ${item.prediction2['score'].toStringAsFixed(1)}%',
-                                                    style: AppTheme.bodySmall.copyWith(
-                                                      color: AppTheme.primary,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
+                                                  const SizedBox(height: 3),
+                                                  _scoreBar(
+                                                    'M2',
+                                                    (item.prediction2['score']
+                                                            as num)
+                                                        .toDouble(),
                                                   ),
                                                 ],
                                               ),
                                             ),
+                                            const SizedBox(width: 8),
                                             Icon(
                                               item.isExpanded
                                                   ? Icons.keyboard_arrow_up
                                                   : Icons.keyboard_arrow_down,
-                                              color: AppTheme.appNameBrown,
+                                              color: AppTheme.mutedText,
+                                              size: 18,
                                             ),
                                           ],
                                         ),

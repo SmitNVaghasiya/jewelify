@@ -86,6 +86,7 @@
 
 import 'package:flutter/material.dart';
 import '../models/jewelry_recommendation.dart';
+import '../screens/app_theme.dart';
 
 class RecommendationCard extends StatelessWidget {
   final JewelryRecommendation recommendation;
@@ -99,75 +100,124 @@ class RecommendationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final hasUrl =
+        recommendation.displayUrl != null &&
+        recommendation.displayUrl!.isNotEmpty;
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: AppTheme.border),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            if (recommendation.displayUrl != null &&
-                recommendation.displayUrl!.isNotEmpty)
-              GestureDetector(
-                onTap: onImageTap != null
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap:
+                hasUrl && onImageTap != null
                     ? () => onImageTap!(recommendation.displayUrl!)
                     : null,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    recommendation.displayUrl!,
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        width: 80,
-                        height: 80,
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.image_not_supported),
-                      );
-                    },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child:
+                  hasUrl
+                      ? Image.network(
+                        recommendation.displayUrl!,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (ctx, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            width: 52,
+                            height: 52,
+                            color: AppTheme.softSurface,
+                            child: Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  value: progress.expectedTotalBytes != null
+                                      ? progress.cumulativeBytesLoaded /
+                                          progress.expectedTotalBytes!
+                                      : null,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        errorBuilder: (ctx, err, _) => _placeholder(),
+                      )
+                      : _placeholder(),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  recommendation.name,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.headingBrown,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  recommendation.category,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.mutedText,
                   ),
                 ),
-              )
-            else
-              Container(
-                width: 80,
-                height: 80,
-                color: Colors.grey[300],
-                child: const Icon(Icons.image_not_supported),
-              ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    recommendation.name,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: recommendation.score / 100,
+                          minHeight: 3,
+                          backgroundColor: AppTheme.border,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            AppTheme.primary,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Compatibility Score: ${recommendation.score.toStringAsFixed(2)}%",
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Category: ${recommendation.category}",
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${recommendation.score.toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _placeholder() {
+    return Container(
+      width: 52,
+      height: 52,
+      color: AppTheme.softSurface,
+      child: const Icon(Icons.diamond_outlined, size: 20, color: AppTheme.mutedText),
     );
   }
 }
