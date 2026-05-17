@@ -1,3 +1,3 @@
 class ApiConstants {
-  static const String baseUrl = 'https://jewelify-server.onrender.com';
+  static const String baseUrl = 'http://192.168.1.9:5000';
 }
