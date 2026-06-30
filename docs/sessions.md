@@ -171,3 +171,45 @@
 - History fetch → 200 OK
 
 **Note**: Remember to revert `ApiConstants.baseUrl` → `https://jewelify-server.onrender.com` before building release APK or pushing to Render.
+
+---
+
+## Session 005 — 2026-05-17
+
+**Goal**: Fix dark mode, fix image loading (local + S3), redesign history + results screens to Variant A (Editorial Luxury)
+
+### Dark Mode Fixes ✅ COMPLETE
+
+| Task | File | What |
+|------|------|------|
+| D-01 | `main.dart` | Was using `ThemeData.light().copyWith()` — bypassed `AppTheme` entirely. Fixed: use `AppTheme.lightTheme` + `AppTheme.darkTheme` |
+| D-02 | `main.dart` | Added `SystemChrome.setSystemUIOverlayStyle` in `toggleTheme()` and `initState()` for status bar icon color |
+| D-03 | 8 screen files | Removed `backgroundColor: AppTheme.background` hardcoded on all Scaffolds — was overriding theme's `scaffoldBackgroundColor` |
+
+**Screens fixed**: `processing_screen`, `history_screen`, `forgot_password_screen`, `login_screen`, `register_screen`, `home_screen`, `results_screen`, `upload_screen`
+
+### Image Path Fix ✅ COMPLETE
+
+| Task | File | What |
+|------|------|------|
+| I-01 | `processing_screen.dart` | Was stripping full device path: `facePath.split('/').last` → filename only. Fixed: send full path. `_loadFile()` in prediction_module uses `File(path).exists()` — requires full path |
+
+**Note**: face/jewelry images are stored as **local device file paths** (not AWS). AWS S3 only serves recommendation images via `display_url`. History items from before this fix show icon placeholders (old entries had filename-only paths).
+
+### Redesign — Variant A (Editorial Luxury) ✅ COMPLETE
+
+| Task | File | What |
+|------|------|------|
+| R-01 | `widgets/prediction_module.dart` | Full rewrite: circular arc score gauge (CustomPainter), large Cormorant italic score number, category chip, gradient image boxes, Icons.star star rating (no emoji), section dividers. Removed ~370 lines of commented-out old code |
+| R-02 | `screens/history_screen.dart` | Card header: two 42×42 image thumbnails (face + jewelry), M1/M2 thin 3px score bars with percentage. Added `_buildThumb()`, `_scoreBar()`, `_getImageFuture()` with path cache |
+| R-03 | `widgets/recommendation_card.dart` | Rewrite: white card + cream border, 52×52 network image with `loadingBuilder`, thin score bar, category text. Removed old Card/elevation style |
+| R-04 | `widgets/score_display.dart` | Untouched — no longer used directly (prediction_module has inline score) |
+
+### Bug Fixes ✅ COMPLETE
+
+| Task | File | What |
+|------|------|------|
+| B-01 | `prediction_module.dart` | Feedback always locked: `overall_feedback` defaults to `0.5` → `(0.5*5).round()=3` → `_feedbackStars>0` → `_hasSubmittedFeedback=true` immediately. Fix: only mark submitted when `feedback_required == false/\'false\'` |
+| B-02 | `prediction_module.dart` | `feedback_required` stored as String in history but bool in results. Fixed check handles both: `fr == false \|\| fr == \'false\' \|\| fr == \'False\'` |
+| B-03 | `prediction_module.dart` | Background was `AppTheme.softSurface` (#f5ede4) — should be `AppTheme.background` (#fdf6ef) to match Variant A cream |
+| B-04 | `recommendation_card.dart` | Added `loadingBuilder` to `Image.network` for S3 images — shows progress indicator while loading instead of blank space |

@@ -120,7 +120,18 @@ Both: update `CLAUDE.md` Pending Work section.
 - Windows Firewall rule required: `netsh advfirewall firewall add rule name="Uvicorn 5000" dir=in action=allow protocol=TCP localport=5000`
 - MongoDB Atlas free tier pauses after ~60 days idle — resume from Atlas dashboard if DNS errors appear
 
+## Image Storage — Important
+face/jewelry images are **local device files** only (NOT AWS). Saved to `getApplicationDocumentsDirectory()` via `ImageStorage.saveImage()`. Full path stored in MongoDB and returned by API. `_loadFile()` in `PredictionModule` reads via `dart:io File`.  
+Recommendation images come from AWS S3 (`jewelify-images.s3.eu-north-1.amazonaws.com`) via `display_url` field → loaded with `Image.network()`.  
+History items from devices where app data was cleared will show icon placeholders (file no longer exists).
+
+## Redesign Status (Session 005)
+- `prediction_module.dart` ✅ Rewritten — Variant A (Editorial Luxury): arc gauge, Cormorant score, category chip, star feedback, gradient image boxes
+- `history_screen.dart` ✅ Card headers — image thumbnails + thin score bars
+- `recommendation_card.dart` ✅ Rewritten — Variant A style with `loadingBuilder` for S3 images
+- Dark mode ✅ Fixed — `AppTheme.lightTheme`/`darkTheme` wired in `main.dart`, all Scaffold `backgroundColor` overrides removed
+
 ## Pending Work
-**Frontend**: ✅ `flutter analyze` clean (0 issues). E2E flow verified working (Session 004).  
+**Frontend**: Run `flutter analyze` to verify 0 issues after Session 005 changes. Future: upload face/jewelry images to S3 during prediction so history images persist across devices.  
 **Backend**: Session 003 (ML recommendations engine — wire actual category to recommendations, motor async driver, JWT refresh token)  
 **Before release**: Revert `ApiConstants.baseUrl` to Render URL. Run `flutter build apk --split-per-abi`.

@@ -215,3 +215,43 @@
 Added `verifyOtp()` method to `AuthProvider`.
 
 **Password validation**: Frontend validator updated to match backend rules (8+ chars, uppercase, digit, special char) so invalid passwords are caught before OTP is sent.
+
+---
+
+## ADR-017: Variant A (Editorial Luxury) Redesign for History + Prediction Module
+**Date**: 2026-05-17  
+**Status**: Accepted
+
+**Context**: History and results screens used generic Material Card widgets with no AppTheme styling. Prediction module had ~370 lines of commented-out dead code. No visual identity.
+
+**Decision**: Redesign to Variant A — Editorial Luxury aesthetic matching Terracotta & Cream design system.
+
+**Key design elements**:
+- History card header: two 42×42 image thumbnails (face + jewelry) + date + M1/M2 thin 3px score bars
+- PredictionModule: circular arc score gauge (CustomPainter), large Cormorant Garamond italic score number, terracotta category chip, gradient image boxes, section dividers
+- Feedback: star rating via `Icons.star_rounded` (no emoji — CLAUDE.md rule), submits on tap
+- RecommendationCard: white container with border, 52×52 `Image.network` + thin score bar
+
+**Files changed**: `prediction_module.dart` (full rewrite), `history_screen.dart` (card header), `recommendation_card.dart` (full rewrite)
+
+---
+
+## ADR-018: face/jewelry Image Storage is Local Device Path (Not Cloud)
+**Date**: 2026-05-17  
+**Status**: Accepted
+
+**Context**: Confusion about whether prediction images (face/jewelry) are stored on AWS S3. Only recommendation images come from S3 (`jewelify-images.s3.eu-north-1.amazonaws.com`).
+
+**Decision**: face/jewelry images are saved to `getApplicationDocumentsDirectory()` by `ImageStorage.saveImage()`. Full device path sent to backend, stored in MongoDB, returned as-is. `_loadFile()` in `PredictionModule` reads via `dart:io File`.
+
+**Implication**: Images only visible on the device that uploaded them. If app data cleared or device changed, history images show placeholder. To fix this permanently: upload images to S3 during prediction and store URL instead of local path (future work).
+
+---
+
+## ADR-019: Feedback Initialization Bug Fix
+**Date**: 2026-05-17  
+**Status**: Accepted
+
+**Context**: `overall_feedback` defaults to `0.5` on new prediction records (set in `results_screen.dart`). `PredictionModule.initState()` was reading this value and computing `(0.5 * 5).round() = 3`, then setting `_hasSubmittedFeedback = true` because `_feedbackStars > 0`. Feedback UI was locked on every open.
+
+**Decision**: Only set `_hasSubmittedFeedback = true` when `feedback_required` is explicitly `false` (backend sets this after successful submission). Also handle both bool and String variants: `fr == false || fr == 'false' || fr == 'False'` (history stores as String, results keeps as bool).

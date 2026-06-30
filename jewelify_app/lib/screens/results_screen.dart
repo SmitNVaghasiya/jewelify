@@ -286,11 +286,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   "Unauthorized: Invalid or expired token. Please log in again.";
               Navigator.pushReplacementNamed(context, '/login');
             } else if (response.statusCode == 400 &&
-                errorDetail == "Failed validation") {
+                errorDetail == "Validation failed") {
               _errorMessage =
                   "Validation failed: Ensure a face is visible and jewelry is clear.";
             } else if (response.statusCode == 500 &&
-                errorDetail == "Failed prediction") {
+                errorDetail == "Prediction failed") {
               _errorMessage =
                   "Prediction failed: Server error during prediction.";
             } else if (response.statusCode == 408) {
@@ -328,8 +328,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   bool _isFallbackPrediction() {
     for (var prediction in _predictions) {
-      if (prediction['category'] == 'Not Assigned' ||
-          (prediction['recommendations'] as List).isEmpty ||
+      if ((prediction['recommendations'] as List).isEmpty ||
           prediction['score'] == 0.0) {
         return true;
       }

@@ -67,7 +67,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             logger.error("Failed to get MongoDB client connection")
             raise HTTPException(status_code=500, detail="Failed to connect to the database")
         db = client["jewelify"]
-        user = db["users"].find_one({"_id": validate_object_id(user_id)})
+        user = await db["users"].find_one({"_id": validate_object_id(user_id)})
     except HTTPException:
         raise
     except Exception as e:

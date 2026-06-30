@@ -75,13 +75,11 @@ def send_otp_via_email(email: str, otp: str) -> bool:
     return send_otp_email(email, otp, otp_expiry_minutes=OTP_EXPIRY_MINUTES)
 
 
-def store_otp(email: str, otp: str) -> bool:
-    """Store the OTP in MongoDB with an expiration time."""
+async def store_otp(email: str, otp: str) -> bool:
     client = get_db_client()
     if not client:
         logger.error("Cannot store OTP: No MongoDB client available")
         return False
-
     try:
         db = client["jewelify"]
         otps_collection = db["otps"]
@@ -90,9 +88,9 @@ def store_otp(email: str, otp: str) -> bool:
             "email": email,
             "otp": otp,
             "created_at": datetime.utcnow().isoformat(),
-            "expires_at": expiry
+            "expires_at": expiry,
         }
-        otps_collection.insert_one(otp_doc)
+        await otps_collection.insert_one(otp_doc)
         logger.info(f"OTP stored for {email}")
         return True
     except Exception as e:
@@ -100,35 +98,30 @@ def store_otp(email: str, otp: str) -> bool:
         return False
 
 
-def verify_otp(email: str, otp: str) -> bool:
-    """Verify the OTP for the given email address."""
+async def verify_otp(email: str, otp: str) -> bool:
     client = get_db_client()
     if not client:
         logger.error("Cannot verify OTP: No MongoDB client available")
         return False
-
     try:
         db = client["jewelify"]
         otps_collection = db["otps"]
-        otp_doc = otps_collection.find_one(
+        otp_doc = await otps_collection.find_one(
             {"email": email, "otp": otp},
-            sort=[("created_at", -1)]  # Get the most recent OTP
+            sort=[("created_at", -1)],
         )
         if not otp_doc:
             logger.warning(f"No OTP found for {email} or OTP does not match")
             return False
 
         expiry = otp_doc["expires_at"]
-        # Handle both datetime objects and ISO strings for backwards compatibility
         if isinstance(expiry, str):
             expiry = datetime.fromisoformat(expiry)
-
         if datetime.utcnow() > expiry:
             logger.warning(f"OTP for {email} has expired")
             return False
 
-        # OTP is valid, delete it from the database
-        otps_collection.delete_one({"_id": otp_doc["_id"]})
+        await otps_collection.delete_one({"_id": otp_doc["_id"]})
         logger.info(f"OTP verified for {email}")
         return True
     except Exception as e:

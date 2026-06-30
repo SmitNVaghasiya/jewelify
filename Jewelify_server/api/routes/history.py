@@ -25,12 +25,7 @@ async def get_user_history(
         db = client["jewelify"]
         predictions_col = db["predictions"]
         reviews_col = db["reviews"]
-        predictions = list(
-            predictions_col.find({"user_id": user_oid})
-            .sort("timestamp", -1)
-            .skip(skip)
-            .limit(limit)
-        )
+        predictions = await predictions_col.find({"user_id": user_oid}).sort("timestamp", -1).skip(skip).limit(limit).to_list(length=limit)
     except Exception as e:
         logger.error(f"Database error fetching history: {e}")
         raise HTTPException(status_code=500, detail="Database error fetching history")
@@ -46,22 +41,22 @@ async def get_user_history(
         user_oid2 = ObjectId(user_id_str)
 
         try:
-            rec_reviews = list(reviews_col.find({
+            rec_reviews = await reviews_col.find({
                 "prediction_id": pred_oid,
                 "user_id": user_oid2,
                 "feedback_type": "recommendation",
-            }))
+            }).to_list(length=None)
             individual_feedback = {"prediction1": {}, "prediction2": {}}
             for review in rec_reviews:
                 mt = review["model_type"]
                 if mt in individual_feedback:
                     individual_feedback[mt][review["recommendation_name"]] = review["score"]
 
-            pred_reviews = list(reviews_col.find({
+            pred_reviews = await reviews_col.find({
                 "prediction_id": pred_oid,
                 "user_id": user_oid2,
                 "feedback_type": "prediction",
-            }))
+            }).to_list(length=None)
             overall_feedback = {"prediction1": None, "prediction2": None}
             for review in pred_reviews:
                 mt = review["model_type"]

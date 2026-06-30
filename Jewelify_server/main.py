@@ -24,7 +24,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ensure_indexes()
+    await ensure_indexes()
     # C-001: load models once, cache in app.state
     app.state.predictor = JewelryPredictor()
     start_keep_alive(app)

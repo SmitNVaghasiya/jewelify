@@ -42,3 +42,7 @@ settings_local.py
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+
+*.ipynb
+data

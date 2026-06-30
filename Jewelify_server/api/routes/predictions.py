@@ -25,7 +25,7 @@ POLLING_TIMEOUT_SECONDS = int(os.getenv("POLLING_TIMEOUT_SECONDS", 60))
 POLLING_INTERVAL_SECONDS = int(os.getenv("POLLING_INTERVAL_SECONDS", 5))
 
 
-def save_prediction_to_db(prediction_data: dict, user_id: str) -> str:
+async def save_prediction_to_db(prediction_data: dict, user_id: str) -> str:
     client = get_db_client()
     if not client:
         raise HTTPException(status_code=500, detail="Database connection unavailable")
@@ -34,7 +34,7 @@ def save_prediction_to_db(prediction_data: dict, user_id: str) -> str:
         prediction_data["timestamp"] = datetime.utcnow().isoformat()
         prediction_data["validation_status"] = "pending"
         prediction_data["prediction_status"] = "pending"
-        result = client["jewelify"]["predictions"].insert_one(prediction_data)
+        result = await client["jewelify"]["predictions"].insert_one(prediction_data)
         return str(result.inserted_id)
     except Exception as e:
         logger.error(f"Failed to save prediction: {e}")
@@ -83,7 +83,7 @@ async def predict(
             "jewelry_image_path": jewelry_image_path,
         }
 
-        prediction_id = save_prediction_to_db(prediction_data, str(user["_id"]))
+        prediction_id = await save_prediction_to_db(prediction_data, str(user["_id"]))
 
         validation_task = asyncio.create_task(
             predictor.validate_images(face_image, jewelry_image, prediction_id)
@@ -122,7 +122,7 @@ async def get_prediction(prediction_id: str, user: dict = Depends(get_current_us
     try:
         db = client["jewelify"]
         col = db["predictions"]
-        prediction = col.find_one({"_id": pred_oid, "user_id": user_oid})
+        prediction = await col.find_one({"_id": pred_oid, "user_id": user_oid})
         if not prediction:
             raise HTTPException(status_code=404, detail="Prediction not found")
 
@@ -135,7 +135,7 @@ async def get_prediction(prediction_id: str, user: dict = Depends(get_current_us
             if (datetime.utcnow() - start_wait).total_seconds() >= POLLING_TIMEOUT_SECONDS:
                 raise HTTPException(status_code=408, detail="Request timed out waiting for prediction to complete")
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-            prediction = col.find_one({"_id": pred_oid, "user_id": user_oid})
+            prediction = await col.find_one({"_id": pred_oid, "user_id": user_oid})
 
         if prediction.get("validation_status") == "failed":
             raise HTTPException(status_code=400, detail="Validation failed")
@@ -206,12 +206,12 @@ async def submit_feedback(
 
     try:
         db = client["jewelify"]
-        prediction = db["predictions"].find_one({"_id": pred_oid, "user_id": user_oid})
+        prediction = await db["predictions"].find_one({"_id": pred_oid, "user_id": user_oid})
         if not prediction:
             raise HTTPException(status_code=404, detail="Prediction not found")
 
         from services.database import save_review
-        success = save_review(
+        success = await save_review(
             user_id=str(user["_id"]),
             prediction_id=prediction_id,
             model_type=model_type,
@@ -223,7 +223,7 @@ async def submit_feedback(
             raise HTTPException(status_code=500, detail="Failed to save feedback")
 
         if feedback_type == "prediction":
-            db["predictions"].update_one(
+            await db["predictions"].update_one(
                 {"_id": pred_oid},
                 {"$set": {f"{model_type}.feedback_required": False}},
             )

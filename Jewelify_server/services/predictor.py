@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import pickle
 import tensorflow as tf
 import xgboost as xgb
 import logging
@@ -28,7 +29,7 @@ class JewelryPredictor:
     def __init__(self, device: str = "CPU"):
         self.device = device
 
-        cascade_path = os.getenv("HAAR_CASCADE_PATH", "haarcascade_frontalface_default.xml")
+        cascade_path = os.getenv("HAAR_CASCADE_PATH", "trained_features/xml/haarcascade_frontalface_default.xml")
         if not os.path.exists(cascade_path):
             logger.warning(f"Haar Cascade file not found at {cascade_path}. Face validation will be skipped.")
             self.face_cascade = None
@@ -60,7 +61,7 @@ class JewelryPredictor:
         try:
             logger.info("Loading XGBoost model...")
             t = time.time()
-            xgboost_model_path = os.getenv("XGBOOST_MODEL_PATH", "xgboost_jewelry_v1.model")
+            xgboost_model_path = os.getenv("XGBOOST_MODEL_PATH", "trained_features/xgboost/xgboost_jewelry_v1.model")
             if not os.path.exists(xgboost_model_path):
                 raise FileNotFoundError(f"XGBoost model not found at {xgboost_model_path}")
             self.xgboost_model = xgb.Booster()
@@ -73,7 +74,7 @@ class JewelryPredictor:
         try:
             logger.info("Loading MLP model...")
             t = time.time()
-            mlp_model_path = os.getenv("MLP_MODEL_PATH", "mlp_jewelry_v1.keras")
+            mlp_model_path = os.getenv("MLP_MODEL_PATH", "trained_features/mlp/mlp_jewelry_v1.keras")
             if not os.path.exists(mlp_model_path):
                 raise FileNotFoundError(f"MLP model not found at {mlp_model_path}")
             self.mlp_model = tf.keras.models.load_model(mlp_model_path)
@@ -82,10 +83,27 @@ class JewelryPredictor:
             logger.error(f"Error loading MLP model: {str(e)}")
             raise RuntimeError(f"Failed to load MLP model: {str(e)}")
 
-        # M-007: corrected S3 path ("earrings" not "earings")
-        self.s3_base_url = os.getenv(
-            "S3_BASE_URL",
-            "https://jewelify-images.s3.eu-north-1.amazonaws.com/Necklace with earrings_sorted_jpg/"
+        try:
+            scaler_xgb_path = os.getenv("SCALER_XGBOOST_PATH", "trained_features/xgboost/scaler_xgboost_v1.pkl")
+            with open(scaler_xgb_path, "rb") as f:
+                self.scaler_xgboost = pickle.load(f)
+            logger.info("XGBoost scaler loaded")
+        except Exception as e:
+            logger.warning(f"XGBoost scaler not loaded: {e}. Using raw features.")
+            self.scaler_xgboost = None
+
+        try:
+            scaler_mlp_path = os.getenv("SCALER_MLP_PATH", "trained_features/mlp/scaler_mlp_v1.pkl")
+            with open(scaler_mlp_path, "rb") as f:
+                self.scaler_mlp = pickle.load(f)
+            logger.info("MLP scaler loaded")
+        except Exception as e:
+            logger.warning(f"MLP scaler not loaded: {e}. Using raw features.")
+            self.scaler_mlp = None
+
+        self._s3_root = os.getenv(
+            "S3_ROOT_URL",
+            "https://jewelify-images.s3.eu-north-1.amazonaws.com/",
         )
 
         self.jewelry_categories = [
@@ -96,6 +114,18 @@ class JewelryPredictor:
             "Ring",
             "Not Assigned",
         ]
+
+        # Maps each category to its S3 folder prefix.
+        # Pattern observed in existing bucket: "{Category}_sorted_jpg/"
+        # "Not Assigned" falls back to Necklace with earrings.
+        self._s3_category_folders = {
+            "Necklace with earrings": "Necklace with earrings_sorted_jpg",
+            "Earrings only": "Earrings only_sorted_jpg",
+            "Necklace only": "Necklace only_sorted_jpg",
+            "Bracelet": "Bracelet_sorted_jpg",
+            "Ring": "Ring_sorted_jpg",
+            "Not Assigned": "Necklace with earrings_sorted_jpg",
+        }
 
     # --- sync helpers (run in thread pool via asyncio.to_thread) ---
 
@@ -130,17 +160,22 @@ class JewelryPredictor:
 
     def _predict_xgboost_sync(self, features: np.ndarray) -> Tuple[float, str]:
         try:
-            dmatrix = xgb.DMatrix(features.reshape(1, -1))
-            prediction = self.xgboost_model.predict(dmatrix)[0]
-            predicted_class = int(round(prediction)) if 0 <= prediction < len(self.jewelry_categories) else 0
-            return 100.0, self.jewelry_categories[predicted_class]
+            scaled = self.scaler_xgboost.transform(features.reshape(1, -1)) if self.scaler_xgboost is not None else features.reshape(1, -1)
+            dmatrix = xgb.DMatrix(scaled)
+            prediction = float(self.xgboost_model.predict(dmatrix)[0])
+            n = len(self.jewelry_categories)
+            predicted_class = int(np.clip(round(prediction), 0, n - 1))
+            # regressor confidence: how close output is to the predicted class integer (0=uncertain, 100=certain)
+            confidence = (1.0 - abs(prediction - round(prediction))) * 100
+            return confidence, self.jewelry_categories[predicted_class]
         except Exception as e:
             logger.error(f"XGBoost prediction error: {e}")
             return 0.0, "Not Assigned"
 
     def _predict_mlp_sync(self, features: np.ndarray) -> Tuple[float, str]:
         try:
-            proba = self.mlp_model.predict(features.reshape(1, -1), verbose=0)[0]
+            scaled = self.scaler_mlp.transform(features.reshape(1, -1)) if self.scaler_mlp is not None else features.reshape(1, -1)
+            proba = self.mlp_model.predict(scaled, verbose=0)[0]
             predicted_class = int(np.argmax(proba))
             return float(proba[predicted_class] * 100), self.jewelry_categories[predicted_class]
         except Exception as e:
@@ -162,33 +197,34 @@ class JewelryPredictor:
             is_valid_face, face_msg = await asyncio.to_thread(self._validate_face_sync, face_image)
             if not is_valid_face:
                 logger.warning(f"Face validation failed: {face_msg}")
-                col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "failed"}})
+                await col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "failed"}})
                 return False
 
             is_valid_jewelry, jewelry_msg = await asyncio.to_thread(self._validate_image_sync, jewelry_image)
             if not is_valid_jewelry:
                 logger.warning(f"Jewelry validation failed: {jewelry_msg}")
-                col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "failed"}})
+                await col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "failed"}})
                 return False
 
-            col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "completed"}})
+            await col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "completed"}})
             logger.info(f"Validation completed for prediction {prediction_id}")
             return True
         except Exception as e:
             logger.error(f"Validation error for {prediction_id}: {e}")
-            col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "failed"}})
+            await col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"validation_status": "failed"}})
             raise
 
     def _build_recommendations(self, category: str, model_tag: str, top_k: int = 10) -> List[dict]:
+        folder = self._s3_category_folders.get(category, "Necklace with earrings_sorted_jpg")
+        folder_url = self._s3_root + urllib.parse.quote(folder) + "/"
         recs = []
         for i in range(top_k):
-            file_name = f"Necklace with earrings_{i}.jpg"
-            display_url = self.s3_base_url + urllib.parse.quote(file_name)
+            file_name = f"{category}_{i}.jpg"
             recs.append({
                 "name": f"{category}_{model_tag}_{i}",
                 "category": category,
                 "score": float(100 - i * 5),
-                "display_url": display_url,
+                "display_url": folder_url + urllib.parse.quote(file_name),
             })
         return recs
 
@@ -218,7 +254,7 @@ class JewelryPredictor:
 
             if face_features is None or jewelry_features is None:
                 logger.error("Feature extraction failed")
-                col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"prediction_status": "failed"}})
+                await col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"prediction_status": "failed"}})
                 return {}
 
             combined = np.concatenate([face_features, jewelry_features])
@@ -255,7 +291,7 @@ class JewelryPredictor:
                 "jewelry_image_path": jewelry_image_path,
             }
 
-            col.update_one(
+            await col.update_one(
                 {"_id": ObjectId(prediction_id)},
                 {"$set": {
                     "prediction1": prediction_result["prediction1"],
@@ -269,7 +305,7 @@ class JewelryPredictor:
             return prediction_result
         except Exception as e:
             logger.error(f"Prediction error for {prediction_id}: {e}")
-            col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"prediction_status": "failed"}})
+            await col.update_one({"_id": ObjectId(prediction_id)}, {"$set": {"prediction_status": "failed"}})
             raise
 
 

@@ -187,11 +187,11 @@ class _ProcessingScreenState extends State<ProcessingScreen>
             _errorMessage =
                 "Server endpoint not found. Please check the backend configuration.";
           } else if (response.statusCode == 400 &&
-              responseBody.contains("Failed validation")) {
+              responseBody.contains("Validation failed")) {
             _errorMessage =
                 "Validation failed: Ensure a face is visible and jewelry is clear.";
           } else if (response.statusCode == 500 &&
-              responseBody.contains("Failed prediction")) {
+              responseBody.contains("Prediction failed")) {
             _errorMessage =
                 "Prediction failed: Server error during prediction.";
           } else if (response.statusCode == 500) {
